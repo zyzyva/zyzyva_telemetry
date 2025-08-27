@@ -137,33 +137,21 @@ defmodule Mix.Tasks.Zyzyva.Setup do
     INTEGRATION INSTRUCTIONS
     ================================================================================
 
-    1. Add monitoring initialization to lib/#{app_name}/application.ex:
+    1. Add monitoring to your supervision tree in lib/#{app_name}/application.ex:
 
        def start(_type, _args) do
          children = [
            # ... your existing children
+           {ZyzyvaTelemetry.MonitoringSupervisor,
+            service_name: "#{app_name}",
+            repo: #{app_module}.Repo,  # Optional: your Ecto repo
+            broadway_pipelines: [  # Optional: Broadway pipelines to monitor
+              # #{app_module}.MyPipeline.Broadway
+            ]}
          ]
          
          opts = [strategy: :one_for_one, name: #{app_module}.Supervisor]
-         result = Supervisor.start_link(children, opts)
-         
-         # Initialize monitoring AFTER supervision tree starts
-         init_monitoring()
-         
-         result
-       end
-       
-       defp init_monitoring do
-         ZyzyvaTelemetry.AppMonitoring.init(
-           repo: #{app_module}.Repo,  # Optional: your Ecto repo
-           broadway_pipelines: [  # Optional: Broadway pipelines to monitor
-             # #{app_module}.MyPipeline.Broadway
-           ],
-           extra_health_checks: %{
-             # Add custom health checks here
-             # my_service: fn -> check_my_service() end
-           }
-         )
+         Supervisor.start_link(children, opts)
        end
 
     2. Add correlation tracking to your browser pipeline:

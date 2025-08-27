@@ -71,23 +71,28 @@ This will:
 - Show detailed integration instructions with proper pipeline setup
 
 Follow the printed instructions to:
-1. Initialize monitoring in your `application.ex`
+1. Add the MonitoringSupervisor to your supervision tree
 2. Add correlation tracking to your browser pipeline
 3. Add the health endpoint with proper pipeline routing
 4. Create health endpoint tests
 
-### Manual Setup
+### Integration
 
-Initialize the telemetry system in your application startup:
+Add ZyzyvaTelemetry as a supervised child in your application:
 
 ```elixir
-config = %{
-  service_name: "my_service",
-  db_path: "/var/lib/monitoring/events.db",  # Optional, uses default
-  health_check_fn: &MyApp.health_check/0     # Optional custom health check
-}
-
-ZyzyvaTelemetry.init(config)
+def start(_type, _args) do
+  children = [
+    # ... your existing children
+    {ZyzyvaTelemetry.MonitoringSupervisor,
+     service_name: "my_app",
+     repo: MyApp.Repo,  # Optional: for database health checks
+     broadway_pipelines: [MyApp.Pipeline.Broadway]}  # Optional: for RabbitMQ monitoring
+  ]
+  
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
+end
 ```
 
 ### Logging Errors

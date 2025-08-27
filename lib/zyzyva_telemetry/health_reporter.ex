@@ -30,7 +30,7 @@ defmodule ZyzyvaTelemetry.HealthReporter do
   - health_check_fn: Function that returns health data map (optional)
   """
   def start_link(config) do
-    GenServer.start_link(__MODULE__, config)
+    GenServer.start_link(__MODULE__, config, name: :zyzyva_telemetry_health_reporter)
   end
 
   @doc """

@@ -10,15 +10,15 @@ defmodule ZyzyvaTelemetry do
 
   ## Usage
 
-  Initialize the telemetry system in your application startup:
+  Add to your application's supervision tree:
 
-      config = %{
-        service_name: "my_service",
-        db_path: "/var/lib/monitoring/events.db",  # Optional, uses default
-        health_check_fn: &MyApp.custom_health_check/0  # Optional
-      }
-      
-      ZyzyvaTelemetry.init(config)
+      children = [
+        # ... other children
+        {ZyzyvaTelemetry.MonitoringSupervisor,
+         service_name: "my_app",
+         repo: MyApp.Repo,
+         broadway_pipelines: [MyApp.Pipeline.Broadway]}
+      ]
 
   Then use throughout your application:
 
@@ -31,62 +31,8 @@ defmodule ZyzyvaTelemetry do
       end)
   """
 
-  alias ZyzyvaTelemetry.{SqliteWriter, HealthReporter, ErrorLogger, Correlation}
+  alias ZyzyvaTelemetry.{HealthReporter, ErrorLogger, Correlation}
 
-  @default_db_path "/var/lib/monitoring/events.db"
-  @fallback_db_path "/tmp/monitoring/events.db"
-
-  @doc """
-  Initializes the ZyzyvaTelemetry system.
-
-  Options:
-  - service_name: Name of your service (required)
-  - db_path: Path to SQLite database (optional, defaults to /var/lib/monitoring/events.db)
-  - node_id: Node identifier (optional, defaults to hostname)
-  - health_check_fn: Function that returns health data (optional)
-  - health_interval_ms: Health reporting interval (optional, defaults to 30000)
-  """
-  def init(config) do
-    # Determine database path
-    db_path = config[:db_path] || determine_db_path()
-
-    # Get or generate node_id
-    {:ok, hostname} = :inet.gethostname()
-    node_id = config[:node_id] || to_string(hostname)
-
-    # Initialize database
-    {:ok, _} = SqliteWriter.init_database(db_path)
-
-    # Configure error logger
-    error_config = %{
-      service_name: config.service_name,
-      node_id: node_id,
-      db_path: db_path
-    }
-
-    ErrorLogger.configure(error_config)
-
-    # Start health reporter if not already running
-    case Process.whereis(:zyzyva_telemetry_health_reporter) do
-      nil ->
-        health_config = %{
-          service_name: config.service_name,
-          node_id: node_id,
-          db_path: db_path,
-          interval_ms: config[:health_interval_ms] || 30_000,
-          health_check_fn: config[:health_check_fn]
-        }
-
-        {:ok, pid} = HealthReporter.start_link(health_config)
-        Process.register(pid, :zyzyva_telemetry_health_reporter)
-
-      _pid ->
-        # Already running, skip
-        :ok
-    end
-
-    :ok
-  end
 
   @doc """
   Logs an error message.
@@ -175,18 +121,4 @@ defmodule ZyzyvaTelemetry do
   """
   defdelegate get_or_generate_correlation(), to: Correlation, as: :get_or_generate
 
-  # Private functions
-
-  defp determine_db_path do
-    cond do
-      File.exists?(Path.dirname(@default_db_path)) ->
-        @default_db_path
-
-      true ->
-        # Use fallback path and ensure directory exists
-        dir = Path.dirname(@fallback_db_path)
-        File.mkdir_p!(dir)
-        @fallback_db_path
-    end
-  end
 end

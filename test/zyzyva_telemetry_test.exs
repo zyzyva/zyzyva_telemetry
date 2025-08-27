@@ -21,14 +21,14 @@ defmodule ZyzyvaTelemetryTest do
     {:ok, db_path: @test_db_path}
   end
 
-  describe "init/1" do
+  describe "MonitoringSupervisor" do
     test "initializes telemetry system with required options", %{db_path: db_path} do
-      config = %{
+      config = [
         service_name: "test_service",
         db_path: db_path
-      }
+      ]
 
-      assert :ok = ZyzyvaTelemetry.init(config)
+      assert {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
 
       # Check that error logger is configured
       assert :ok = ZyzyvaTelemetry.log_error("Test error")
@@ -41,11 +41,11 @@ defmodule ZyzyvaTelemetryTest do
     end
 
     test "uses default db path if not specified" do
-      config = %{
+      config = [
         service_name: "test_service"
-      }
+      ]
 
-      assert :ok = ZyzyvaTelemetry.init(config)
+      assert {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
 
       # Should have created the default directory
       assert File.exists?("/var/lib/monitoring") or File.exists?("/tmp/monitoring")
@@ -59,13 +59,13 @@ defmodule ZyzyvaTelemetryTest do
         }
       end
 
-      config = %{
+      config = [
         service_name: "test_service",
         db_path: db_path,
-        health_check_fn: health_check
-      }
+        extra_health_checks: %{custom: health_check}
+      ]
 
-      assert :ok = ZyzyvaTelemetry.init(config)
+      assert {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
 
       Process.sleep(100)
 
@@ -92,12 +92,12 @@ defmodule ZyzyvaTelemetryTest do
 
   describe "logging functions" do
     setup %{db_path: db_path} do
-      config = %{
+      config = [
         service_name: "test_service",
         db_path: db_path
-      }
+      ]
 
-      ZyzyvaTelemetry.init(config)
+      {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
       {:ok, db_path: db_path}
     end
 
@@ -191,12 +191,12 @@ defmodule ZyzyvaTelemetryTest do
 
   describe "health reporting" do
     test "report_health/1 manually reports health", %{db_path: db_path} do
-      config = %{
+      config = [
         service_name: "test_service",
         db_path: db_path
-      }
+      ]
 
-      ZyzyvaTelemetry.init(config)
+      {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
 
       health_data = %{
         status: :degraded,

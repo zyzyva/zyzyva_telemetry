@@ -8,7 +8,14 @@ A lightweight monitoring library for distributed Elixir applications that provid
 - **Zero network blocking** - All writes are local file operations
 - **Automatic health reporting** - Configurable periodic health checks
 - **Correlation ID tracking** - Follow requests across multiple services
-- **Minimal dependencies** - Only requires `exqlite`, uses native JSON module
+- **OTP supervision** - Proper supervision tree integration via MonitoringSupervisor
+- **Broadway monitoring** - Built-in RabbitMQ/Broadway pipeline health checks
+- **Minimal dependencies** - Only requires `exqlite` and `plug`, uses Elixir 1.18+ native JSON
+
+## Requirements
+
+- Elixir 1.18+ (for native JSON support)
+- Write access to `/var/lib/monitoring/` or configured database path
 
 ## Installation
 
@@ -59,41 +66,66 @@ The database file and tables will be created automatically when the application 
 
 ### Quick Setup for Phoenix Apps
 
-Run the setup task to generate integration code:
+Run the setup task for automated integration:
 
 ```bash
 mix zyzyva.setup
 ```
 
-This will:
-- Generate a test helper for health endpoint testing
-- Add test configuration for a temporary test database
-- Show detailed integration instructions with proper pipeline setup
+This comprehensive setup task will:
+- Generate a test helper module for health endpoint testing
+- Automatically add test configuration to `config/test.exs`
+- Create a temporary test database configuration
+- Provide complete integration code snippets for your application
+- Show Broadway pipeline configuration examples (if applicable)
 
-Follow the printed instructions to:
-1. Add the MonitoringSupervisor to your supervision tree
-2. Add correlation tracking to your browser pipeline
-3. Add the health endpoint with proper pipeline routing
-4. Create health endpoint tests
+The task provides copy-paste ready code for:
+1. Adding MonitoringSupervisor to your application supervision tree
+2. Configuring Broadway pipelines in your config files
+3. Adding correlation tracking to your browser pipeline
+4. Setting up the health endpoint with proper routing
+5. Creating comprehensive health endpoint tests
 
 ### Integration
 
-Add ZyzyvaTelemetry as a supervised child in your application:
+The MonitoringSupervisor is the primary integration point. Add it to your application's supervision tree:
 
 ```elixir
+# In lib/my_app/application.ex
 def start(_type, _args) do
   children = [
-    # ... your existing children
+    # ... your existing children (Repo, PubSub, etc.)
+    
+    # Add the monitoring supervisor
     {ZyzyvaTelemetry.MonitoringSupervisor,
      service_name: "my_app",
      repo: MyApp.Repo,  # Optional: for database health checks
-     broadway_pipelines: [MyApp.Pipeline.Broadway]}  # Optional: for RabbitMQ monitoring
+     broadway_pipelines: Application.get_env(:my_app, :broadway_pipelines, [])}
   ]
   
   opts = [strategy: :one_for_one, name: MyApp.Supervisor]
   Supervisor.start_link(children, opts)
 end
 ```
+
+#### Configuration-Based Broadway Monitoring
+
+For cleaner separation of concerns, configure Broadway pipelines in your config files:
+
+```elixir
+# config/config.exs
+config :my_app,
+  broadway_pipelines: [
+    MyApp.Pipeline.Broadway,
+    MyApp.AnotherPipeline.Broadway
+  ]
+
+# config/test.exs - Override for test environment
+config :my_app,
+  broadway_pipelines: []  # No Broadway pipelines in test
+```
+
+This approach keeps your application.ex clean and makes it easy to configure different pipelines per environment.
 
 ### Logging Errors
 
@@ -149,23 +181,25 @@ ZyzyvaTelemetry.log_error("Failed") # Will include correlation ID
 
 ### Broadway/RabbitMQ Monitoring
 
-The `AppMonitoring` module can automatically monitor Broadway pipelines:
+Broadway pipeline monitoring is built into the MonitoringSupervisor. When you provide the `broadway_pipelines` option, the health reporter will automatically:
 
-```elixir
-ZyzyvaTelemetry.AppMonitoring.init(
-  repo: MyApp.Repo,
-  broadway_pipelines: [
-    MyApp.Pipeline.Broadway,
-    MyApp.AnotherPipeline.Broadway
-  ]
-)
-```
+- Check if each Broadway pipeline process is running
+- Report `rabbitmq_connected: true/false` in health checks
+- Include Broadway status in overall health determination
 
-This will include RabbitMQ connection status in health checks.
+The monitoring works by checking if the named Broadway processes are alive, which indicates RabbitMQ connectivity.
 
 ### Health Reporting
 
-The health reporter runs automatically at configured intervals. You can also report manually:
+The health reporter runs automatically at configured intervals (default: 30 seconds). Health data includes:
+
+- Memory usage with automatic status thresholds
+- Process count monitoring
+- Database connectivity (if repo configured)
+- Broadway/RabbitMQ status (if pipelines configured)
+- Custom health checks (if provided)
+
+You can also report health manually:
 
 ```elixir
 # Manual health report
@@ -174,20 +208,25 @@ ZyzyvaTelemetry.report_health(%{
   reason: "High memory usage",
   memory_mb: 1024
 })
+```
 
-# Custom health check function
-def health_check do
-  %{
-    status: :healthy,
-    queue_depth: MyApp.Queue.depth(),
-    connections: MyApp.ConnectionPool.active_count()
-  }
-end
+#### Custom Health Checks
+
+Add custom health checks via the `extra_health_checks` option:
+
+```elixir
+{ZyzyvaTelemetry.MonitoringSupervisor,
+ service_name: "my_app",
+ repo: MyApp.Repo,
+ extra_health_checks: %{
+   queue_depth: fn -> %{queue_depth: MyApp.Queue.depth()} end,
+   cache_status: fn -> %{cache_hit_rate: MyApp.Cache.hit_rate()} end
+ }}
 ```
 
 ## Testing
 
-A test helper template is provided in `test_helper_template.ex.example`. Copy this file to your app's `test/support/` directory and update the module name to match your app's namespace. This provides reusable assertions for testing health endpoints.
+The setup task generates a test helper module and configures your test environment automatically. The test helper provides reusable assertions for testing health endpoints.
 
 Example usage:
 ```elixir
@@ -205,9 +244,29 @@ defmodule MyAppWeb.HealthControllerTest do
 end
 ```
 
+## Configuration Options
+
+The MonitoringSupervisor accepts these options:
+
+- `service_name` - Application name (required, defaults to Mix.Project app name)
+- `repo` - Ecto repo module for database health checks (optional)
+- `broadway_pipelines` - List of Broadway pipeline modules to monitor (optional)
+- `extra_health_checks` - Map of custom health check functions (optional)
+- `health_interval_ms` - Health check interval in milliseconds (default: 30_000)
+- `db_path` - Database path (default: `/var/lib/monitoring/events.db`)
+- `node_id` - Node identifier (defaults to `node()`)
+
 ## Architecture
 
-ZyzyvaTelemetry writes all monitoring data to a local SQLite database that is shared by all applications on the server. A separate aggregator service (not included) can forward this data to a central monitoring system.
+ZyzyvaTelemetry uses a local-first architecture with these key components:
 
-The SQLite database path `/var/lib/monitoring/events.db` is designed to be shared across all services on a single server, enabling efficient local aggregation before forwarding to central monitoring.
+- **MonitoringSupervisor** - Main OTP supervisor that manages all monitoring processes
+- **HealthReporter** - GenServer that periodically collects and reports health metrics
+- **ErrorLogger** - Centralized error and warning logging with correlation support
+- **SqliteWriter** - Direct SQLite operations without connection pooling for simplicity
+- **Correlation** - Process-dictionary based correlation ID tracking
+
+The library writes all monitoring data to a local SQLite database that is shared by all applications on the server. A separate aggregator service (not included) can forward this data to a central monitoring system.
+
+The SQLite database at `/var/lib/monitoring/events.db` is designed to be shared across all services on a single server, enabling efficient local aggregation before forwarding to central monitoring. The database uses a simple schema with proper indexes for performance.
 

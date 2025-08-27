@@ -24,7 +24,7 @@ defmodule ZyzyvaTelemetry.MixProject do
   defp deps do
     [
       {:exqlite, "~> 0.33"},
-      {:plug, "~> 1.18", optional: true}
+      {:plug, "~> 1.18"}
     ]
   end
 

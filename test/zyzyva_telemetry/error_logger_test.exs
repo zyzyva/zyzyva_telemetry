@@ -183,7 +183,9 @@ defmodule ZyzyvaTelemetry.ErrorLoggerTest do
           e ->
             stacktrace = __STACKTRACE__
             metadata = %{request_id: "req_999", endpoint: "/api/divide"}
-            assert :ok = ErrorLogger.log_exception(e, stacktrace, "Math operation failed", metadata)
+
+            assert :ok =
+                     ErrorLogger.log_exception(e, stacktrace, "Math operation failed", metadata)
         end
       end)
 

@@ -1,35 +1,38 @@
 defmodule Mix.Tasks.Zyzyva.Setup do
   @moduledoc """
   Generates ZyzyvaTelemetry integration code for Phoenix applications.
-  
+
   Usage:
       mix zyzyva.setup
-  
+
   This task will:
   - Generate a test helper for health endpoint testing
   - Show instructions for integrating monitoring into your app
   - Create example configuration
   """
-  
+
   use Mix.Task
-  
+
   @shortdoc "Sets up ZyzyvaTelemetry monitoring in a Phoenix app"
-  
+
   def run(_args) do
     app_name = Mix.Project.config()[:app]
     web_module = get_web_module(app_name)
-    
+
     Mix.shell().info("Setting up ZyzyvaTelemetry for #{app_name}...")
-    
+
     # Generate test helper
     generate_test_helper(web_module)
-    
+
+    # Add test configuration
+    add_test_config(app_name)
+
     # Show integration instructions
     show_integration_instructions(app_name, web_module)
-    
+
     Mix.shell().info("\n✅ ZyzyvaTelemetry setup complete!")
   end
-  
+
   defp get_web_module(app_name) do
     # Convert app_name to CamelCase for module name
     app_name
@@ -39,10 +42,10 @@ defmodule Mix.Tasks.Zyzyva.Setup do
     |> Enum.join("")
     |> then(&"#{&1}Web")
   end
-  
+
   defp generate_test_helper(web_module) do
     test_helper_path = "test/support/health_endpoint_test_helper.ex"
-    
+
     content = """
     defmodule #{web_module}.HealthEndpointTestHelper do
       @moduledoc \"\"\"
@@ -115,7 +118,7 @@ defmodule Mix.Tasks.Zyzyva.Setup do
       end
     end
     """
-    
+
     if File.exists?(test_helper_path) do
       Mix.shell().info("⚠️  Test helper already exists at #{test_helper_path}")
     else
@@ -124,18 +127,18 @@ defmodule Mix.Tasks.Zyzyva.Setup do
       Mix.shell().info("✅ Created test helper at #{test_helper_path}")
     end
   end
-  
+
   defp show_integration_instructions(app_name, web_module) do
     app_module = String.replace(web_module, "Web", "")
-    
+
     Mix.shell().info("""
-    
+
     ================================================================================
     INTEGRATION INSTRUCTIONS
     ================================================================================
-    
+
     1. Add monitoring initialization to lib/#{app_name}/application.ex:
-    
+
        def start(_type, _args) do
          # Initialize monitoring (add after children are defined)
          init_monitoring()
@@ -152,23 +155,23 @@ defmodule Mix.Tasks.Zyzyva.Setup do
            }
          )
        end
-    
+
     2. Add health endpoint to lib/#{app_name}_web/router.ex:
-    
+
        # Add this scope (outside of any pipelines)
        scope "/" do
          get "/health", ZyzyvaTelemetry.HealthController, :index
        end
-    
+
     3. (Optional) Add correlation tracking to your browser pipeline:
-    
+
        pipeline :browser do
          # ... existing plugs
          plug ZyzyvaTelemetry.Plugs.CorrelationTracker
        end
-    
+
     4. Create a test for your health endpoint:
-    
+
        # test/#{app_name}_web/controllers/health_controller_test.exs
        defmodule #{web_module}.HealthControllerTest do
          use #{web_module}.ConnCase
@@ -185,20 +188,48 @@ defmodule Mix.Tasks.Zyzyva.Setup do
            assert_monitoring_initialized()
          end
        end
-    
+
     5. Configuration (optional):
-    
+
        # config/config.exs or runtime.exs
        config :#{app_name},
          monitoring_db_path: "/var/lib/monitoring/events.db"  # Default path
-    
+
     ================================================================================
     """)
   end
-  
+
   defp ensure_directory_exists(path) do
     unless File.exists?(path) do
       File.mkdir_p!(path)
+    end
+  end
+
+  defp add_test_config(app_name) do
+    test_config_path = "config/test.exs"
+
+    if File.exists?(test_config_path) do
+      config_to_add = """
+
+      # Use a temporary monitoring database for tests
+      config :#{app_name},
+        monitoring_db_path: "/tmp/monitoring_test/events.db"
+      """
+
+      # Read the existing config
+      existing_config = File.read!(test_config_path)
+
+      # Check if the config is already present
+      if String.contains?(existing_config, "monitoring_db_path") do
+        Mix.shell().info("⚠️  Test config already contains monitoring_db_path")
+      else
+        # Append the config to the file
+        updated_config = existing_config <> config_to_add
+        File.write!(test_config_path, updated_config)
+        Mix.shell().info("✅ Added test configuration to #{test_config_path}")
+      end
+    else
+      Mix.shell().info("⚠️  Test config file not found at #{test_config_path}")
     end
   end
 end

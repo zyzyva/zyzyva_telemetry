@@ -57,7 +57,20 @@ The database file and tables will be created automatically when the application 
 
 ## Usage
 
-### Basic Setup
+### Quick Setup for Phoenix Apps
+
+Run the setup task to generate integration code:
+
+```bash
+mix zyzyva.setup
+```
+
+This will:
+- Generate a test helper for health endpoint testing
+- Show detailed integration instructions
+- Provide example configuration
+
+### Manual Setup
 
 Initialize the telemetry system in your application startup:
 

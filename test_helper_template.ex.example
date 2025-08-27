@@ -1,0 +1,92 @@
+# Example Test Helper Template for Phoenix Apps
+#
+# Copy this file to your Phoenix app's test/support/ directory and rename to
+# health_endpoint_test_helper.ex (or similar). Update the module name to match
+# your app's namespace.
+#
+# Usage in your tests:
+#   defmodule MyAppWeb.HealthControllerTest do
+#     use MyAppWeb.ConnCase
+#     import MyAppWeb.HealthEndpointTestHelper
+#
+#     test "GET /health returns telemetry data", %{conn: conn} do
+#       conn = get(conn, "/health")
+#       body = assert_health_endpoint(conn,
+#         service_name: "my_app",
+#         required_fields: ["memory", "processes", "database_connected"]
+#       )
+#     end
+#   end
+
+defmodule MyAppWeb.HealthEndpointTestHelper do
+  @moduledoc """
+  Test helper for testing ZyzyvaTelemetry health endpoints.
+  """
+  
+  import ExUnit.Assertions
+  
+  @doc """
+  Tests a health endpoint to ensure it returns proper telemetry data.
+  Assumes conn is already set up from ConnCase.
+  
+  ## Options
+    * `:service_name` - Expected service name (optional, will check if present)
+    * `:required_fields` - List of fields that must be present (defaults to standard fields)
+  """
+  def assert_health_endpoint(conn, opts \\ []) do
+    # Should return 200 OK or 503 for critical status
+    assert conn.status in [200, 503]
+    
+    # Parse the JSON response
+    body = Phoenix.json_library().decode!(conn.resp_body)
+    
+    # Verify standard fields
+    assert body["status"] in ["healthy", "degraded", "critical", "unknown"]
+    assert body["service"]
+    assert body["timestamp"]
+    
+    # Check optional service name
+    if service_name = opts[:service_name] do
+      assert body["service"] == service_name
+    end
+    
+    # Check telemetry-provided fields
+    required_fields = opts[:required_fields] || ["memory", "processes", "database_connected"]
+    
+    for field <- required_fields do
+      assert Map.has_key?(body, field), "Missing required field: #{field}"
+    end
+    
+    # Verify memory structure if present
+    if body["memory"] do
+      assert body["memory"]["mb"], "Memory should have 'mb' field"
+      assert body["memory"]["status"] in ["ok", "warning", "critical"],
+             "Memory status should be ok, warning, or critical"
+    end
+    
+    # Verify processes structure if present
+    if body["processes"] do
+      assert body["processes"]["count"], "Processes should have 'count' field"
+      assert body["processes"]["status"] in ["ok", "warning", "critical"],
+             "Processes status should be ok, warning, or critical"
+    end
+    
+    body
+  end
+  
+  @doc """
+  Asserts that monitoring has been properly initialized for the app.
+  """
+  def assert_monitoring_initialized do
+    case ZyzyvaTelemetry.AppMonitoring.get_health_status() do
+      {:ok, health_data} ->
+        assert health_data[:status] in [:healthy, :degraded, :critical, :unknown]
+        assert health_data[:memory]
+        assert health_data[:processes]
+        health_data
+        
+      {:error, reason} ->
+        flunk("Monitoring not initialized: #{inspect(reason)}")
+    end
+  end
+end

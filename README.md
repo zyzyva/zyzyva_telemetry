@@ -130,6 +130,26 @@ def health_check do
 end
 ```
 
+## Testing
+
+A test helper template is provided in `test_helper_template.ex.example`. Copy this file to your app's `test/support/` directory and update the module name to match your app's namespace. This provides reusable assertions for testing health endpoints.
+
+Example usage:
+```elixir
+defmodule MyAppWeb.HealthControllerTest do
+  use MyAppWeb.ConnCase
+  import MyAppWeb.HealthEndpointTestHelper
+
+  test "GET /health returns telemetry data", %{conn: conn} do
+    conn = get(conn, "/health")
+    body = assert_health_endpoint(conn,
+      service_name: "my_app",
+      required_fields: ["memory", "processes", "database_connected"]
+    )
+  end
+end
+```
+
 ## Architecture
 
 ZyzyvaTelemetry writes all monitoring data to a local SQLite database that is shared by all applications on the server. A separate aggregator service (not included) can forward this data to a central monitoring system.

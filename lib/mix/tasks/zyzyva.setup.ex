@@ -140,15 +140,25 @@ defmodule Mix.Tasks.Zyzyva.Setup do
     1. Add monitoring initialization to lib/#{app_name}/application.ex:
 
        def start(_type, _args) do
-         # Initialize monitoring (add after children are defined)
+         children = [
+           # ... your existing children
+         ]
+         
+         opts = [strategy: :one_for_one, name: #{app_module}.Supervisor]
+         result = Supervisor.start_link(children, opts)
+         
+         # Initialize monitoring AFTER supervision tree starts
          init_monitoring()
          
-         # ... rest of your start function
+         result
        end
        
        defp init_monitoring do
          ZyzyvaTelemetry.AppMonitoring.init(
            repo: #{app_module}.Repo,  # Optional: your Ecto repo
+           broadway_pipelines: [  # Optional: Broadway pipelines to monitor
+             # #{app_module}.MyPipeline.Broadway
+           ],
            extra_health_checks: %{
              # Add custom health checks here
              # my_service: fn -> check_my_service() end
@@ -156,18 +166,19 @@ defmodule Mix.Tasks.Zyzyva.Setup do
          )
        end
 
-    2. Add health endpoint to lib/#{app_name}_web/router.ex:
-
-       # Add this scope (outside of any pipelines)
-       scope "/" do
-         get "/health", ZyzyvaTelemetry.HealthController, :index
-       end
-
-    3. (Optional) Add correlation tracking to your browser pipeline:
+    2. Add correlation tracking to your browser pipeline:
 
        pipeline :browser do
          # ... existing plugs
          plug ZyzyvaTelemetry.Plugs.CorrelationTracker
+       end
+
+    3. Add health endpoint to lib/#{app_name}_web/router.ex:
+
+       # Health endpoint (with correlation tracking)
+       scope "/" do
+         pipe_through :browser  # Or :api if you prefer JSON-only
+         get "/health", ZyzyvaTelemetry.HealthController, :index
        end
 
     4. Create a test for your health endpoint:

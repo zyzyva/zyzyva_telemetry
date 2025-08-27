@@ -67,8 +67,14 @@ mix zyzyva.setup
 
 This will:
 - Generate a test helper for health endpoint testing
-- Show detailed integration instructions
-- Provide example configuration
+- Add test configuration for a temporary test database
+- Show detailed integration instructions with proper pipeline setup
+
+Follow the printed instructions to:
+1. Initialize monitoring in your `application.ex`
+2. Add correlation tracking to your browser pipeline
+3. Add the health endpoint with proper pipeline routing
+4. Create health endpoint tests
 
 ### Manual Setup
 
@@ -107,7 +113,22 @@ end
 
 ### Correlation Tracking
 
-Track requests across services:
+For Phoenix applications, add the correlation plug to your pipeline:
+
+```elixir
+pipeline :browser do
+  # ... other plugs
+  plug ZyzyvaTelemetry.Plugs.CorrelationTracker
+end
+
+# Add health endpoint with correlation tracking
+scope "/" do
+  pipe_through :browser  # Important: use pipeline for correlation
+  get "/health", ZyzyvaTelemetry.HealthController, :index
+end
+```
+
+Track requests programmatically:
 
 ```elixir
 # Set correlation ID for distributed tracing
@@ -120,6 +141,22 @@ end)
 ZyzyvaTelemetry.set_correlation("request-123")
 ZyzyvaTelemetry.log_error("Failed") # Will include correlation ID
 ```
+
+### Broadway/RabbitMQ Monitoring
+
+The `AppMonitoring` module can automatically monitor Broadway pipelines:
+
+```elixir
+ZyzyvaTelemetry.AppMonitoring.init(
+  repo: MyApp.Repo,
+  broadway_pipelines: [
+    MyApp.Pipeline.Broadway,
+    MyApp.AnotherPipeline.Broadway
+  ]
+)
+```
+
+This will include RabbitMQ connection status in health checks.
 
 ### Health Reporting
 

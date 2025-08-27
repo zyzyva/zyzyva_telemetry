@@ -23,7 +23,8 @@ defmodule ZyzyvaTelemetry.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:exqlite, "~> 0.33"}
+      {:exqlite, "~> 0.33"},
+      {:plug, "~> 1.18", optional: true}
     ]
   end
 

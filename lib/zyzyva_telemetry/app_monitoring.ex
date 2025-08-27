@@ -11,6 +11,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
 
     * `:app_name` - The application name (defaults to app from Mix.Project)
     * `:repo` - The Ecto repo module for database health checks (optional)
+    * `:broadway_pipelines` - List of Broadway pipeline modules to monitor (optional)
     * `:extra_health_checks` - Additional health check functions to merge
     * `:health_interval_ms` - Health check interval (defaults to 30_000)
     * `:db_path` - Database path (defaults to /var/lib/monitoring/events.db)
@@ -19,6 +20,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
 
       ZyzyvaTelemetry.AppMonitoring.init(
         repo: MyApp.Repo,
+        broadway_pipelines: [MyApp.Pipeline.Broadway],
         extra_health_checks: %{
           redis_connected: &check_redis/0
         }
@@ -27,6 +29,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
   def init(opts \\ []) do
     app_name = opts[:app_name] || infer_app_name()
     repo = opts[:repo]
+    broadway_pipelines = opts[:broadway_pipelines] || []
     extra_checks = opts[:extra_health_checks] || %{}
     health_interval = opts[:health_interval_ms] || 30_000
 
@@ -39,7 +42,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
     config = %{
       service_name: to_string(app_name),
       db_path: db_path,
-      health_check_fn: build_health_check_fn(repo, extra_checks),
+      health_check_fn: build_health_check_fn(repo, broadway_pipelines, extra_checks),
       health_interval_ms: health_interval
     }
 
@@ -256,7 +259,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
     end
   end
 
-  defp build_health_check_fn(repo, extra_checks) do
+  defp build_health_check_fn(repo, broadway_pipelines, extra_checks) do
     fn ->
       # Build standard health checks
       base_health = %{
@@ -270,6 +273,15 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
       base_health =
         if repo do
           Map.put(base_health, :database_connected, check_database(repo))
+        else
+          base_health
+        end
+
+      # Add Broadway/RabbitMQ checks if pipelines provided
+      base_health =
+        if broadway_pipelines != [] do
+          rabbitmq_connected = check_broadway_pipelines(broadway_pipelines)
+          Map.put(base_health, :rabbitmq_connected, rabbitmq_connected)
         else
           base_health
         end
@@ -295,6 +307,11 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
       overall_status = determine_overall_status(merged)
       Map.put(merged, :status, overall_status)
     end
+  end
+
+  defp check_broadway_pipelines(pipelines) do
+    # Check if all Broadway pipelines are running
+    Enum.all?(pipelines, &check_process/1)
   end
 
   defp determine_overall_status(health_data) do

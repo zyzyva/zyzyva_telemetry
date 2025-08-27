@@ -1,0 +1,138 @@
+# ZyzyvaTelemetry
+
+A lightweight monitoring library for distributed Elixir applications that provides local-first error logging, health reporting, and distributed tracing without network blocking.
+
+## Features
+
+- **Local-first monitoring** - Writes to shared SQLite database at `/var/lib/monitoring/events.db`
+- **Zero network blocking** - All writes are local file operations
+- **Automatic health reporting** - Configurable periodic health checks
+- **Correlation ID tracking** - Follow requests across multiple services
+- **Minimal dependencies** - Only requires `exqlite`, uses native JSON module
+
+## Installation
+
+Add `zyzyva_telemetry` to your list of dependencies in `mix.exs`:
+
+```elixir
+def deps do
+  [
+    {:zyzyva_telemetry, "~> 0.1.0"}
+  ]
+end
+```
+
+### Database Setup
+
+The monitoring database needs to be created at `/var/lib/monitoring/events.db`. This typically requires elevated permissions.
+
+#### From Development
+
+```bash
+# Using the included setup module
+mix run -e "ZyzyvaTelemetry.Setup.init()"
+```
+
+#### From a Release
+
+```bash
+# The setup module is available in your release
+./my_app eval "ZyzyvaTelemetry.Setup.init()"
+
+# Or with a custom path
+./my_app eval "ZyzyvaTelemetry.Setup.init('/custom/path/events.db')"
+```
+
+#### Manual Setup
+
+If you prefer to set up the directory manually:
+
+```bash
+sudo mkdir -p /var/lib/monitoring
+sudo chown $USER:$USER /var/lib/monitoring
+sudo chmod 755 /var/lib/monitoring
+```
+
+The database file and tables will be created automatically when the application starts.
+
+## Usage
+
+### Basic Setup
+
+Initialize the telemetry system in your application startup:
+
+```elixir
+config = %{
+  service_name: "my_service",
+  db_path: "/var/lib/monitoring/events.db",  # Optional, uses default
+  health_check_fn: &MyApp.health_check/0     # Optional custom health check
+}
+
+ZyzyvaTelemetry.init(config)
+```
+
+### Logging Errors
+
+```elixir
+# Simple error
+ZyzyvaTelemetry.log_error("Something went wrong")
+
+# Error with metadata
+ZyzyvaTelemetry.log_error("Failed to process", %{user_id: 123, action: "create"})
+
+# Warning
+ZyzyvaTelemetry.log_warning("Memory usage high")
+
+# Exception with stack trace
+try do
+  risky_operation()
+rescue
+  e ->
+    ZyzyvaTelemetry.log_exception(e, __STACKTRACE__, "Operation failed")
+end
+```
+
+### Correlation Tracking
+
+Track requests across services:
+
+```elixir
+# Set correlation ID for distributed tracing
+ZyzyvaTelemetry.with_correlation(request_id, fn ->
+  # All errors logged here will include the correlation ID
+  process_request()
+end)
+
+# Or manually manage correlation
+ZyzyvaTelemetry.set_correlation("request-123")
+ZyzyvaTelemetry.log_error("Failed") # Will include correlation ID
+```
+
+### Health Reporting
+
+The health reporter runs automatically at configured intervals. You can also report manually:
+
+```elixir
+# Manual health report
+ZyzyvaTelemetry.report_health(%{
+  status: :degraded,
+  reason: "High memory usage",
+  memory_mb: 1024
+})
+
+# Custom health check function
+def health_check do
+  %{
+    status: :healthy,
+    queue_depth: MyApp.Queue.depth(),
+    connections: MyApp.ConnectionPool.active_count()
+  }
+end
+```
+
+## Architecture
+
+ZyzyvaTelemetry writes all monitoring data to a local SQLite database that is shared by all applications on the server. A separate aggregator service (not included) can forward this data to a central monitoring system.
+
+The SQLite database path `/var/lib/monitoring/events.db` is designed to be shared across all services on a single server, enabling efficient local aggregation before forwarding to central monitoring.
+

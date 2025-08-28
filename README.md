@@ -256,6 +256,21 @@ The MonitoringSupervisor accepts these options:
 - `db_path` - Database path (default: `/var/lib/monitoring/events.db`)
 - `node_id` - Node identifier (defaults to `node()`)
 
+## Data Management
+
+The library writes events to a shared SQLite database that grows over time. Data retention and cleanup should be handled by a separate aggregator service (not included) that:
+
+1. Reads unforwarded events from the database
+2. Forwards them to central monitoring
+3. Marks events as forwarded using `SqliteWriter.mark_events_forwarded/2`
+4. Deletes old forwarded events periodically
+5. Runs VACUUM to reclaim disk space
+
+Without an aggregator, expect approximately:
+- 10 services: ~24 MB/day
+- 50 services: ~120 MB/day
+- 100 services: ~240 MB/day
+
 ## Architecture
 
 ZyzyvaTelemetry uses a local-first architecture with these key components:
@@ -263,10 +278,18 @@ ZyzyvaTelemetry uses a local-first architecture with these key components:
 - **MonitoringSupervisor** - Main OTP supervisor that manages all monitoring processes
 - **HealthReporter** - GenServer that periodically collects and reports health metrics
 - **ErrorLogger** - Centralized error and warning logging with correlation support
-- **SqliteWriter** - Direct SQLite operations without connection pooling for simplicity
+- **SqliteWriter** - Direct SQLite operations with support for forwarding markers
 - **Correlation** - Process-dictionary based correlation ID tracking
 
 The library writes all monitoring data to a local SQLite database that is shared by all applications on the server. A separate aggregator service (not included) can forward this data to a central monitoring system.
 
-The SQLite database at `/var/lib/monitoring/events.db` is designed to be shared across all services on a single server, enabling efficient local aggregation before forwarding to central monitoring. The database uses a simple schema with proper indexes for performance.
+### Database Performance
+
+The SQLite database at `/var/lib/monitoring/events.db` is optimized for concurrent access:
+
+- **WAL mode** - Write-Ahead Logging for better concurrency (readers don't block writers)
+- **NORMAL synchronous** - Safe with WAL, better performance than FULL
+- **10MB cache** - Reduced disk I/O for frequently accessed data
+- **Memory-mapped I/O** - Up to 256MB for faster access
+- **Proper indexes** - Efficient queries on forwarded status, timestamps, and correlation IDs
 

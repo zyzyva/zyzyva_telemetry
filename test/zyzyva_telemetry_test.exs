@@ -45,10 +45,13 @@ defmodule ZyzyvaTelemetryTest do
         service_name: "test_service"
       ]
 
-      assert {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
+      assert {:ok, pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
 
       # Should have created the default directory
-      assert File.exists?("/var/lib/monitoring") or File.exists?("/tmp/monitoring")
+      assert File.exists?("/var/lib/monitoring") or File.exists?("/tmp/monitoring_test")
+
+      # Clean up
+      GenServer.stop(pid)
     end
 
     test "allows custom health check function", %{db_path: db_path} do

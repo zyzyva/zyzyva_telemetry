@@ -33,7 +33,6 @@ defmodule ZyzyvaTelemetry do
 
   alias ZyzyvaTelemetry.{HealthReporter, ErrorLogger, Correlation}
 
-
   @doc """
   Logs an error message.
   """
@@ -120,5 +119,4 @@ defmodule ZyzyvaTelemetry do
   Gets the current correlation ID or generates a new one.
   """
   defdelegate get_or_generate_correlation(), to: Correlation, as: :get_or_generate
-
 end

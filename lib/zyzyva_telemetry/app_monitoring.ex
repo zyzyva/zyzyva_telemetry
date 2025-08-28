@@ -4,7 +4,6 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
   Provides standard health checks and DRY initialization.
   """
 
-
   @doc """
   Get the current health status for use in health endpoints.
   Returns the most recent health check data.
@@ -95,5 +94,4 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
       _pid -> true
     end
   end
-
 end

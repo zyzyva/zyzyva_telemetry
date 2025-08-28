@@ -48,7 +48,7 @@ defmodule ZyzyvaTelemetry.MonitoringSupervisor do
 
     children = [
       {ZyzyvaTelemetry.HealthReporter, health_config}
-      # Could add more monitoring processes here in the future
+      # Data retention will be handled by the aggregator service
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

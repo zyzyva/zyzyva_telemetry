@@ -119,4 +119,93 @@ defmodule ZyzyvaTelemetry do
   Gets the current correlation ID or generates a new one.
   """
   defdelegate get_or_generate_correlation(), to: Correlation, as: :get_or_generate
+
+  # Test Generation Functions (for QA and testing)
+
+  @doc """
+  Generates test monitoring events for QA purposes.
+
+  This function is available at runtime in production releases.
+
+  ## Options
+    * `:count` - Number of events to generate (default: 10)
+    * `:service_name` - Override the service name (default: uses app name)
+    * `:include_errors` - Whether to include error events (default: true)
+    * `:include_critical` - Whether to include critical events (default: false)
+
+  ## Examples
+
+      # Generate 10 test events
+      ZyzyvaTelemetry.generate_test_events()
+      
+      # Generate 50 events with critical alerts
+      ZyzyvaTelemetry.generate_test_events(count: 50, include_critical: true)
+  """
+  def generate_test_events(opts \\ []) do
+    ensure_test_generator_loaded()
+    apply(ZyzyvaTelemetry.TestGenerator, :generate_test_events, [opts])
+  end
+
+  @doc """
+  Generates a critical incident simulation for testing alerts.
+
+  This will generate a series of critical and error events to trigger
+  alerting in the monitoring dashboard.
+
+  ## Examples
+
+      # Generate critical incident for current app
+      ZyzyvaTelemetry.generate_critical_incident()
+      
+      # Generate for specific service
+      ZyzyvaTelemetry.generate_critical_incident("api_gateway")
+  """
+  def generate_critical_incident(service_name \\ nil) do
+    ensure_test_generator_loaded()
+    apply(ZyzyvaTelemetry.TestGenerator, :generate_critical_incident, [service_name])
+  end
+
+  @doc """
+  Generates a performance degradation scenario.
+
+  ## Examples
+
+      # Run 30-second performance test
+      ZyzyvaTelemetry.generate_performance_degradation()
+      
+      # Run 60-second test
+      ZyzyvaTelemetry.generate_performance_degradation(60)
+  """
+  def generate_performance_degradation(duration_seconds \\ 30) do
+    ensure_test_generator_loaded()
+    apply(ZyzyvaTelemetry.TestGenerator, :generate_performance_degradation, [duration_seconds])
+  end
+
+  @doc """
+  Triggers REAL monitoring events through the actual error logging system.
+
+  This is the most realistic test as it uses the same code path that production
+  errors would use. It actually calls log_error, log_warning, and log_exception.
+
+  ## Options
+    * `:count` - Number of real errors to trigger (default: 5)
+    * `:include_exception` - Whether to raise and catch real exceptions (default: true)
+
+  ## Examples
+
+      # Trigger 5 real errors
+      ZyzyvaTelemetry.trigger_real_errors()
+      
+      # Trigger 10 real errors including exceptions
+      ZyzyvaTelemetry.trigger_real_errors(count: 10, include_exception: true)
+  """
+  def trigger_real_errors(opts \\ []) do
+    ensure_test_generator_loaded()
+    apply(ZyzyvaTelemetry.TestGenerator, :trigger_real_errors, [opts])
+  end
+
+  # Ensure TestGenerator is loaded (it might be lazy-loaded in releases)
+  defp ensure_test_generator_loaded do
+    Code.ensure_loaded(ZyzyvaTelemetry.TestGenerator)
+  end
 end

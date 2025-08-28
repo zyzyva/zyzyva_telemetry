@@ -305,4 +305,38 @@ defmodule ZyzyvaTelemetry.SqliteWriter do
       metadata: metadata
     }
   end
+
+  @doc """
+  Deletes old forwarded events older than the given timestamp.
+  Returns {:ok, deleted_count} or {:error, reason}.
+  """
+  def delete_old_forwarded_events(db_path, cutoff_timestamp) do
+    sql = "DELETE FROM events WHERE forwarded = 1 AND timestamp < ?"
+
+    with {:ok, conn} <- open_connection(db_path),
+         {:ok, statement} <- Exqlite.Sqlite3.prepare(conn, sql),
+         :ok <- Exqlite.Sqlite3.bind(statement, [cutoff_timestamp]),
+         :done <- Exqlite.Sqlite3.step(conn, statement),
+         {:ok, changes} <- Exqlite.Sqlite3.changes(conn),
+         :ok <- Exqlite.Sqlite3.release(conn, statement),
+         :ok <- Exqlite.Sqlite3.close(conn) do
+      {:ok, changes}
+    else
+      error -> {:error, error}
+    end
+  end
+
+  @doc """
+  Runs VACUUM on the database to reclaim space after deletions.
+  Should be called periodically after cleanup operations.
+  """
+  def vacuum_database(db_path) do
+    with {:ok, conn} <- open_connection(db_path),
+         :ok <- Exqlite.Sqlite3.execute(conn, "VACUUM"),
+         :ok <- Exqlite.Sqlite3.close(conn) do
+      :ok
+    else
+      error -> {:error, error}
+    end
+  end
 end

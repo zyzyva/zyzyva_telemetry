@@ -192,7 +192,7 @@ defmodule Mix.Tasks.Zyzyva.Setup do
 
        # config/config.exs or runtime.exs
        config :#{app_name},
-         monitoring_db_path: "/var/lib/monitoring/events.db"  # Default path
+         db_path: "/var/lib/monitoring/events.db"  # Default path
 
     ================================================================================
     """)
@@ -212,15 +212,15 @@ defmodule Mix.Tasks.Zyzyva.Setup do
 
       # Use a temporary monitoring database for tests
       config :#{app_name},
-        monitoring_db_path: "/tmp/monitoring_test/events.db"
+        db_path: "/tmp/monitoring_test/events.db"
       """
 
       # Read the existing config
       existing_config = File.read!(test_config_path)
 
       # Check if the config is already present
-      if String.contains?(existing_config, "monitoring_db_path") do
-        Mix.shell().info("⚠️  Test config already contains monitoring_db_path")
+      if String.contains?(existing_config, "db_path") do
+        Mix.shell().info("⚠️  Test config already contains db_path")
       else
         # Append the config to the file
         updated_config = existing_config <> config_to_add

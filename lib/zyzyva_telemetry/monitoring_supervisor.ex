@@ -78,7 +78,7 @@ defmodule ZyzyvaTelemetry.MonitoringSupervisor do
 
   defp determine_db_path(opts) do
     opts[:db_path] ||
-      Application.get_env(opts[:app_name] || :zyzyva_telemetry, :monitoring_db_path) ||
+      Application.get_env(opts[:app_name] || :zyzyva_telemetry, :db_path) ||
       default_db_path()
   end
 

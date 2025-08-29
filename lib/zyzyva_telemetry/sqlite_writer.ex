@@ -309,34 +309,170 @@ defmodule ZyzyvaTelemetry.SqliteWriter do
   @doc """
   Deletes old forwarded events older than the given timestamp.
   Returns {:ok, deleted_count} or {:error, reason}.
+
+  ## Options
+  - :dry_run - When true, returns count of events that would be deleted without actually deleting them
   """
-  def delete_old_forwarded_events(db_path, cutoff_timestamp) do
+  def delete_old_forwarded_events(db_path, cutoff_timestamp, opts \\ []) do
+    dry_run = Keyword.get(opts, :dry_run, false)
+
+    if dry_run do
+      count_deletable_events(db_path, cutoff_timestamp)
+    else
+      perform_deletion(db_path, cutoff_timestamp)
+    end
+  end
+
+  defp count_deletable_events(db_path, cutoff_timestamp) do
+    sql = "SELECT COUNT(*) FROM events WHERE forwarded = 1 AND timestamp < ?"
+
+    with {:ok, conn} <- open_connection(db_path),
+         {:ok, statement} <- Exqlite.Sqlite3.prepare(conn, sql),
+         :ok <- Exqlite.Sqlite3.bind(statement, [cutoff_timestamp]),
+         {:row, [count]} <- Exqlite.Sqlite3.step(conn, statement),
+         :ok <- Exqlite.Sqlite3.release(conn, statement),
+         :ok <- Exqlite.Sqlite3.close(conn) do
+      {:ok, count}
+    else
+      error ->
+        cleanup_on_error(db_path)
+        {:error, error}
+    end
+  end
+
+  defp perform_deletion(db_path, cutoff_timestamp) do
     sql = "DELETE FROM events WHERE forwarded = 1 AND timestamp < ?"
 
     with {:ok, conn} <- open_connection(db_path),
+         :ok <- Exqlite.Sqlite3.execute(conn, "BEGIN IMMEDIATE TRANSACTION"),
          {:ok, statement} <- Exqlite.Sqlite3.prepare(conn, sql),
          :ok <- Exqlite.Sqlite3.bind(statement, [cutoff_timestamp]),
          :done <- Exqlite.Sqlite3.step(conn, statement),
          {:ok, changes} <- Exqlite.Sqlite3.changes(conn),
          :ok <- Exqlite.Sqlite3.release(conn, statement),
+         :ok <- Exqlite.Sqlite3.execute(conn, "COMMIT"),
          :ok <- Exqlite.Sqlite3.close(conn) do
       {:ok, changes}
     else
-      error -> {:error, error}
+      error ->
+        cleanup_on_error(db_path)
+        {:error, error}
     end
   end
 
   @doc """
   Runs VACUUM on the database to reclaim space after deletions.
   Should be called periodically after cleanup operations.
+
+  Note: VACUUM can be expensive on large databases as it rebuilds the entire database file.
+  Consider running during off-peak hours.
   """
   def vacuum_database(db_path) do
+    # VACUUM cannot run inside a transaction, needs exclusive access
     with {:ok, conn} <- open_connection(db_path),
-         :ok <- Exqlite.Sqlite3.execute(conn, "VACUUM"),
+         :ok <- execute_vacuum(conn),
          :ok <- Exqlite.Sqlite3.close(conn) do
       :ok
     else
-      error -> {:error, error}
+      error ->
+        cleanup_on_error(db_path)
+        {:error, error}
     end
   end
+
+  defp execute_vacuum(conn) do
+    # Set a reasonable timeout for VACUUM operation (5 minutes)
+    with :ok <- Exqlite.Sqlite3.execute(conn, "PRAGMA busy_timeout = 300000"),
+         :ok <- Exqlite.Sqlite3.execute(conn, "VACUUM") do
+      :ok
+    else
+      error -> error
+    end
+  end
+
+  @doc """
+  Gets database statistics including size, event counts, and space usage.
+  Useful for monitoring database health and deciding when to run maintenance.
+  """
+  def get_database_stats(db_path) do
+    with {:ok, conn} <- open_connection(db_path),
+         {:ok, stats} <- gather_stats(conn),
+         :ok <- Exqlite.Sqlite3.close(conn) do
+      {:ok, stats}
+    else
+      error ->
+        cleanup_on_error(db_path)
+        {:error, error}
+    end
+  end
+
+  defp gather_stats(conn) do
+    with {:ok, total_events} <- get_stat(conn, "SELECT COUNT(*) FROM events"),
+         {:ok, forwarded_events} <-
+           get_stat(conn, "SELECT COUNT(*) FROM events WHERE forwarded = 1"),
+         {:ok, unforwarded_events} <-
+           get_stat(conn, "SELECT COUNT(*) FROM events WHERE forwarded = 0"),
+         {:ok, page_count} <- get_stat(conn, "PRAGMA page_count"),
+         {:ok, page_size} <- get_stat(conn, "PRAGMA page_size"),
+         {:ok, freelist_count} <- get_stat(conn, "PRAGMA freelist_count") do
+      database_size = page_count * page_size
+      free_space = freelist_count * page_size
+      fragmentation_percent = if database_size > 0, do: free_space / database_size * 100, else: 0
+
+      {:ok,
+       %{
+         total_events: total_events,
+         forwarded_events: forwarded_events,
+         unforwarded_events: unforwarded_events,
+         database_size_bytes: database_size,
+         free_space_bytes: free_space,
+         fragmentation_percent: Float.round(fragmentation_percent, 2),
+         page_count: page_count,
+         page_size: page_size
+       }}
+    else
+      error -> error
+    end
+  end
+
+  defp get_stat(conn, query) do
+    with {:ok, statement} <- Exqlite.Sqlite3.prepare(conn, query),
+         {:row, [value]} <- Exqlite.Sqlite3.step(conn, statement),
+         :ok <- Exqlite.Sqlite3.release(conn, statement) do
+      {:ok, value}
+    else
+      :done -> {:ok, 0}
+      error -> error
+    end
+  end
+
+  @doc """
+  Optimizes the database by running ANALYZE to update query planner statistics.
+  This is lighter weight than VACUUM and should be run more frequently.
+  """
+  def analyze_database(db_path) do
+    with {:ok, conn} <- open_connection(db_path),
+         :ok <- Exqlite.Sqlite3.execute(conn, "ANALYZE"),
+         :ok <- Exqlite.Sqlite3.close(conn) do
+      :ok
+    else
+      error ->
+        cleanup_on_error(db_path)
+        {:error, error}
+    end
+  end
+
+  # Helper to clean up connection on error
+  defp cleanup_on_error(db_path) when is_binary(db_path) do
+    # Try to close any lingering connection
+    try do
+      {:ok, conn} = Exqlite.Sqlite3.open(db_path)
+      Exqlite.Sqlite3.execute(conn, "ROLLBACK")
+      Exqlite.Sqlite3.close(conn)
+    rescue
+      _ -> :ok
+    end
+  end
+
+  defp cleanup_on_error(_), do: :ok
 end

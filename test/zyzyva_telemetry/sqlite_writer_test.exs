@@ -321,6 +321,31 @@ defmodule ZyzyvaTelemetry.SqliteWriterTest do
       assert {:ok, 0} = SqliteWriter.delete_old_forwarded_events(db_path, ancient_cutoff)
     end
 
+    test "supports dry run mode", %{db_path: db_path, cutoff_time: cutoff} do
+      # First do a dry run to see what would be deleted
+      assert {:ok, 5} = SqliteWriter.delete_old_forwarded_events(db_path, cutoff, dry_run: true)
+
+      # Verify nothing was actually deleted
+      {:ok, conn} = Exqlite.Sqlite3.open(db_path)
+      {:ok, statement} = Exqlite.Sqlite3.prepare(conn, "SELECT COUNT(*) FROM events")
+      {:ok, [[total]]} = Exqlite.Sqlite3.fetch_all(conn, statement)
+      # All 12 events should still be there
+      assert total == 12
+      Exqlite.Sqlite3.release(conn, statement)
+      Exqlite.Sqlite3.close(conn)
+
+      # Now do the actual deletion
+      assert {:ok, 5} = SqliteWriter.delete_old_forwarded_events(db_path, cutoff)
+
+      # Verify events were deleted
+      {:ok, conn} = Exqlite.Sqlite3.open(db_path)
+      {:ok, statement} = Exqlite.Sqlite3.prepare(conn, "SELECT COUNT(*) FROM events")
+      {:ok, [[total]]} = Exqlite.Sqlite3.fetch_all(conn, statement)
+      assert total == 7
+      Exqlite.Sqlite3.release(conn, statement)
+      Exqlite.Sqlite3.close(conn)
+    end
+
     test "handles empty database", %{db_path: db_path} do
       # Clear all events first
       {:ok, conn} = Exqlite.Sqlite3.open(db_path)
@@ -397,6 +422,86 @@ defmodule ZyzyvaTelemetry.SqliteWriterTest do
 
       # Vacuum should still work even with empty database
       assert :ok = SqliteWriter.vacuum_database(db_path)
+    end
+  end
+
+  describe "get_database_stats/1" do
+    setup %{db_path: db_path} do
+      {:ok, _} = SqliteWriter.init_database(db_path)
+
+      # Add some test events
+      for i <- 1..10 do
+        SqliteWriter.write_event(db_path, %{
+          service_name: "stats_test",
+          node_id: "node1",
+          event_type: "test",
+          severity: "info",
+          message: "Event #{i}",
+          correlation_id: nil,
+          metadata: nil
+        })
+      end
+
+      # Mark half as forwarded
+      {:ok, conn} = Exqlite.Sqlite3.open(db_path)
+      :ok = Exqlite.Sqlite3.execute(conn, "UPDATE events SET forwarded = 1 WHERE ROWID <= 5")
+      Exqlite.Sqlite3.close(conn)
+
+      {:ok, db_path: db_path}
+    end
+
+    test "returns comprehensive database statistics", %{db_path: db_path} do
+      assert {:ok, stats} = SqliteWriter.get_database_stats(db_path)
+
+      assert stats.total_events == 10
+      assert stats.forwarded_events == 5
+      assert stats.unforwarded_events == 5
+      assert stats.database_size_bytes > 0
+      assert stats.page_count > 0
+      assert stats.page_size > 0
+      assert is_float(stats.fragmentation_percent)
+      assert stats.fragmentation_percent >= 0
+    end
+
+    test "handles empty database", %{db_path: db_path} do
+      # Clear all events
+      {:ok, conn} = Exqlite.Sqlite3.open(db_path)
+      :ok = Exqlite.Sqlite3.execute(conn, "DELETE FROM events")
+      Exqlite.Sqlite3.close(conn)
+
+      assert {:ok, stats} = SqliteWriter.get_database_stats(db_path)
+      assert stats.total_events == 0
+      assert stats.forwarded_events == 0
+      assert stats.unforwarded_events == 0
+    end
+  end
+
+  describe "analyze_database/1" do
+    setup %{db_path: db_path} do
+      {:ok, _} = SqliteWriter.init_database(db_path)
+      {:ok, db_path: db_path}
+    end
+
+    test "successfully runs ANALYZE", %{db_path: db_path} do
+      assert :ok = SqliteWriter.analyze_database(db_path)
+
+      # Verify database is still functional
+      assert :ok =
+               SqliteWriter.write_event(db_path, %{
+                 service_name: "post_analyze",
+                 node_id: "node1",
+                 event_type: "test",
+                 severity: "info",
+                 message: "Test after analyze",
+                 correlation_id: nil,
+                 metadata: nil
+               })
+    end
+
+    test "can be run multiple times", %{db_path: db_path} do
+      assert :ok = SqliteWriter.analyze_database(db_path)
+      assert :ok = SqliteWriter.analyze_database(db_path)
+      assert :ok = SqliteWriter.analyze_database(db_path)
     end
   end
 

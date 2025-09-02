@@ -26,6 +26,7 @@ defmodule ZyzyvaTelemetry.MonitoringSupervisor do
     * `:extra_health_checks` - Additional health check functions to merge
     * `:health_interval_ms` - Health check interval (defaults to 30_000)
     * `:db_path` - Database path (defaults to /var/lib/monitoring/events.db)
+    * `:enable_database` - Enable SQLite database logging (defaults to false)
   """
   def start_link(opts) do
     Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
@@ -33,18 +34,25 @@ defmodule ZyzyvaTelemetry.MonitoringSupervisor do
 
   @impl true
   def init(opts) do
-    # Initialize the database first (synchronously)
-    db_path = init_database(opts)
+    # Initialize database if enabled
+    db_path =
+      if Keyword.get(opts, :enable_database, false) do
+        init_database(opts)
+      else
+        nil
+      end
 
     # Build configuration for health reporter
     health_config = build_health_config(opts, db_path)
 
-    # Configure the error logger
-    ZyzyvaTelemetry.ErrorLogger.configure(%{
-      service_name: health_config.service_name,
-      node_id: health_config.node_id,
-      db_path: db_path
-    })
+    # Configure the error logger only if database is enabled
+    if db_path do
+      ZyzyvaTelemetry.ErrorLogger.configure(%{
+        service_name: health_config.service_name,
+        node_id: health_config.node_id,
+        db_path: db_path
+      })
+    end
 
     children = [
       {ZyzyvaTelemetry.HealthReporter, health_config}
@@ -71,7 +79,11 @@ defmodule ZyzyvaTelemetry.MonitoringSupervisor do
             fallback_path
 
           {:error, _} ->
-            raise "Failed to initialize monitoring database: #{inspect(reason)}"
+            :logger.warning(
+              "Failed to initialize monitoring database: #{inspect(reason)}. Database logging disabled."
+            )
+
+            nil
         end
     end
   end
@@ -101,11 +113,11 @@ defmodule ZyzyvaTelemetry.MonitoringSupervisor do
       node_id: opts[:node_id] || to_string(node()),
       db_path: db_path,
       interval_ms: opts[:health_interval_ms] || 30_000,
-      health_check_fn: build_health_check_fn(opts)
+      health_check_fn: build_health_check_fn(opts, db_path)
     }
   end
 
-  defp build_health_check_fn(opts) do
+  defp build_health_check_fn(opts, db_path) do
     repo = opts[:repo]
     broadway_pipelines = opts[:broadway_pipelines] || []
     extra_checks = opts[:extra_health_checks] || %{}
@@ -119,9 +131,9 @@ defmodule ZyzyvaTelemetry.MonitoringSupervisor do
         processes: check_processes()
       }
 
-      # Add database check if repo provided
+      # Add database check only if repo provided AND database is enabled (db_path is not nil)
       base_health =
-        if repo do
+        if repo && db_path do
           Map.put(base_health, :database_connected, check_database(repo))
         else
           base_health
@@ -153,9 +165,13 @@ defmodule ZyzyvaTelemetry.MonitoringSupervisor do
 
   defp check_database(repo) do
     try do
-      repo.query!("SELECT 1")
-      true
+      # Use query instead of query! to handle errors gracefully
+      case repo.query("SELECT 1") do
+        {:ok, _} -> true
+        {:error, _} -> false
+      end
     rescue
+      # Handle any connection pool or other errors
       _ -> false
     end
   end

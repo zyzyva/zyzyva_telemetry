@@ -25,7 +25,8 @@ defmodule ZyzyvaTelemetryTest do
     test "initializes telemetry system with required options", %{db_path: db_path} do
       config = [
         service_name: "test_service",
-        db_path: db_path
+        db_path: db_path,
+        enable_database: true
       ]
 
       assert {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
@@ -42,7 +43,8 @@ defmodule ZyzyvaTelemetryTest do
 
     test "uses default db path if not specified" do
       config = [
-        service_name: "test_service"
+        service_name: "test_service",
+        enable_database: true
       ]
 
       assert {:ok, pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
@@ -65,7 +67,8 @@ defmodule ZyzyvaTelemetryTest do
       config = [
         service_name: "test_service",
         db_path: db_path,
-        extra_health_checks: %{custom: health_check}
+        extra_health_checks: %{custom: health_check},
+        enable_database: true
       ]
 
       assert {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
@@ -97,7 +100,8 @@ defmodule ZyzyvaTelemetryTest do
     setup %{db_path: db_path} do
       config = [
         service_name: "test_service",
-        db_path: db_path
+        db_path: db_path,
+        enable_database: true
       ]
 
       {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)
@@ -196,7 +200,8 @@ defmodule ZyzyvaTelemetryTest do
     test "report_health/1 manually reports health", %{db_path: db_path} do
       config = [
         service_name: "test_service",
-        db_path: db_path
+        db_path: db_path,
+        enable_database: true
       ]
 
       {:ok, _pid} = ZyzyvaTelemetry.MonitoringSupervisor.start_link(config)

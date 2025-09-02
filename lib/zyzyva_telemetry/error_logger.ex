@@ -15,7 +15,7 @@ defmodule ZyzyvaTelemetry.ErrorLogger do
   Config options:
   - service_name: Name of the service (required)
   - node_id: Node identifier (required)
-  - db_path: Path to SQLite database (required)
+  - db_path: Path to SQLite database (optional - if nil, database writes are skipped)
   """
   def configure(config) do
     :persistent_term.put(@config_key, config)
@@ -50,10 +50,14 @@ defmodule ZyzyvaTelemetry.ErrorLogger do
   def log_error(message, metadata, correlation_id) do
     case get_config() do
       {:ok, config} ->
-        # Use provided correlation_id or get from process dictionary
-        final_correlation_id = correlation_id || ZyzyvaTelemetry.Correlation.get()
-        event = build_error_event(config, message, "error", metadata, final_correlation_id)
-        SqliteWriter.write_event(config.db_path, event)
+        if config.db_path do
+          # Use provided correlation_id or get from process dictionary
+          final_correlation_id = correlation_id || ZyzyvaTelemetry.Correlation.get()
+          event = build_error_event(config, message, "error", metadata, final_correlation_id)
+          SqliteWriter.write_event(config.db_path, event)
+        else
+          :ok
+        end
 
       {:error, :not_configured} ->
         {:error, :not_configured}
@@ -73,8 +77,12 @@ defmodule ZyzyvaTelemetry.ErrorLogger do
   def log_warning(message, metadata) do
     case get_config() do
       {:ok, config} ->
-        event = build_error_event(config, message, "warning", metadata, nil)
-        SqliteWriter.write_event(config.db_path, event)
+        if config.db_path do
+          event = build_error_event(config, message, "warning", metadata, nil)
+          SqliteWriter.write_event(config.db_path, event)
+        else
+          :ok
+        end
 
       {:error, :not_configured} ->
         {:error, :not_configured}
@@ -94,30 +102,34 @@ defmodule ZyzyvaTelemetry.ErrorLogger do
   def log_exception(exception, stacktrace, message, additional_metadata) do
     case get_config() do
       {:ok, config} ->
-        # Extract exception details
-        exception_type = exception.__struct__ |> Module.split() |> List.last()
-        exception_message = Exception.message(exception)
+        if config.db_path do
+          # Extract exception details
+          exception_type = exception.__struct__ |> Module.split() |> List.last()
+          exception_message = Exception.message(exception)
 
-        # Format stack trace
-        formatted_stacktrace =
-          Exception.format_stacktrace(stacktrace)
-          |> String.split("\n")
-          |> Enum.map(&String.trim/1)
-          |> Enum.reject(&(&1 == ""))
+          # Format stack trace
+          formatted_stacktrace =
+            Exception.format_stacktrace(stacktrace)
+            |> String.split("\n")
+            |> Enum.map(&String.trim/1)
+            |> Enum.reject(&(&1 == ""))
 
-        # Build metadata
-        metadata =
-          Map.merge(additional_metadata, %{
-            error_type: exception_type,
-            error_message: exception_message,
-            stacktrace: formatted_stacktrace
-          })
+          # Build metadata
+          metadata =
+            Map.merge(additional_metadata, %{
+              error_type: exception_type,
+              error_message: exception_message,
+              stacktrace: formatted_stacktrace
+            })
 
-        # Build full message
-        full_message = "#{message}: #{inspect(exception)}"
+          # Build full message
+          full_message = "#{message}: #{inspect(exception)}"
 
-        event = build_error_event(config, full_message, "error", metadata, nil)
-        SqliteWriter.write_event(config.db_path, event)
+          event = build_error_event(config, full_message, "error", metadata, nil)
+          SqliteWriter.write_event(config.db_path, event)
+        else
+          :ok
+        end
 
       {:error, :not_configured} ->
         {:error, :not_configured}

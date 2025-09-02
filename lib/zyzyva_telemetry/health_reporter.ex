@@ -25,7 +25,7 @@ defmodule ZyzyvaTelemetry.HealthReporter do
   Config options:
   - service_name: Name of the service (required)
   - node_id: Node identifier (required)
-  - db_path: Path to SQLite database (required)
+  - db_path: Path to SQLite database (optional - if nil, database writes are skipped)
   - interval_ms: Reporting interval in milliseconds (default: 30000)
   - health_check_fn: Function that returns health data map (optional)
   """
@@ -103,30 +103,33 @@ defmodule ZyzyvaTelemetry.HealthReporter do
   end
 
   defp write_health_event(state, health_data) do
-    severity =
-      case health_data[:status] || health_data.status do
-        :healthy -> "info"
-        :degraded -> "warning"
-        :unhealthy -> "error"
-        _ -> "info"
-      end
+    # Skip database write if db_path is nil
+    if state.db_path do
+      severity =
+        case health_data[:status] || health_data.status do
+          :healthy -> "info"
+          :degraded -> "warning"
+          :unhealthy -> "error"
+          _ -> "info"
+        end
 
-    message = build_health_message(health_data)
+      message = build_health_message(health_data)
 
-    # Convert atoms to strings in metadata for JSON encoding
-    metadata = stringify_metadata(health_data)
+      # Convert atoms to strings in metadata for JSON encoding
+      metadata = stringify_metadata(health_data)
 
-    event = %{
-      service_name: state.service_name,
-      node_id: state.node_id,
-      event_type: "health",
-      severity: severity,
-      message: message,
-      correlation_id: nil,
-      metadata: metadata
-    }
+      event = %{
+        service_name: state.service_name,
+        node_id: state.node_id,
+        event_type: "health",
+        severity: severity,
+        message: message,
+        correlation_id: nil,
+        metadata: metadata
+      }
 
-    SqliteWriter.write_event(state.db_path, event)
+      SqliteWriter.write_event(state.db_path, event)
+    end
   end
 
   defp build_health_message(health_data) do

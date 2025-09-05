@@ -14,21 +14,9 @@ This document outlines the requirements for Phoenix applications to be compatibl
 
 **Implementation with ZyzyvaTelemetry**:
 ```elixir
-# Option 1: Use the ready-made controller in your router.ex
-scope "/", YourAppWeb do
-  get "/health", ZyzyvaTelemetry.HealthController, :index
-end
-
-# Option 2: Use the Phoenix macro (one-line setup)
-defmodule YourAppWeb.Router do
-  use YourAppWeb, :router
-  use ZyzyvaTelemetry.PhoenixHealth  # Automatically adds /health endpoint
-  
-  # Your other routes...
-end
-
-# Option 3: Use as a plug
-get "/health", ZyzyvaTelemetry.Plugs.HealthEndpoint, []
+# IMPORTANT: ZyzyvaTelemetry.HealthController is a Plug, not a Phoenix controller
+# Use Plug syntax (verified working):
+get "/health", ZyzyvaTelemetry.HealthController, []
 ```
 
 **Manual Implementation** (if not using ZyzyvaTelemetry):
@@ -494,16 +482,10 @@ children = [
 ]
 ```
 
-2. **Add health endpoint to router (choose one):**
+2. **Add health endpoint to router:**
 ```elixir
-# Option A: One-line macro
-use ZyzyvaTelemetry.PhoenixHealth
-
-# Option B: Controller reference
-get "/health", ZyzyvaTelemetry.HealthController, :index
-
-# Option C: Plug
-get "/health", ZyzyvaTelemetry.Plugs.HealthEndpoint, []
+# ZyzyvaTelemetry.HealthController is a Plug (verified working)
+get "/health", ZyzyvaTelemetry.HealthController, []
 ```
 
 3. **Health checks are automatically included:**

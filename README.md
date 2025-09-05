@@ -225,11 +225,9 @@ pipeline :browser do
   plug ZyzyvaTelemetry.Plugs.CorrelationTracker
 end
 
-# Add health endpoint with correlation tracking
-scope "/" do
-  pipe_through :browser  # Important: use pipeline for correlation
-  get "/health", ZyzyvaTelemetry.HealthController, :index
-end
+# Add health endpoint - IMPORTANT: HealthController is a Plug, not a Phoenix controller
+# Use Plug syntax (not controller syntax):
+get "/health", ZyzyvaTelemetry.HealthController, []
 ```
 
 Track requests programmatically:

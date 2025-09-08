@@ -153,26 +153,20 @@ if config_env() == :prod do
 end
 ```
 
-**For applications using SQLite**, add DATABASE_PATH configuration:
+**For applications using SQLite**, add the standardized database path to `config/prod.exs`:
 ```elixir
-# Additional configuration for SQLite repos
-database_path =
-  System.get_env("DATABASE_PATH") ||
-  raise """
-  environment variable DATABASE_PATH is missing.
-  For example: /opt/phoenix-data/sqlite/your_app/database.db
-  """
-
+# Production configuration for SQLite repos - Ubuntu deployment
 config :your_app, YourApp.SQLiteRepo,
   adapter: Ecto.Adapters.SQLite3,
-  database: database_path,
-  pool_size: 5
+  database: "/opt/phoenix-data/sqlite/your_app/database.db",
+  pool_size: 100
 ```
 
 **SQLite Database Path Convention:**
 All SQLite databases in production follow a standardized path structure:
 - **Location**: `/opt/phoenix-data/sqlite/{app_name}/`
 - **Example**: `/opt/phoenix-data/sqlite/representation4us/database.db`
+- **Platform**: Ubuntu deployment assumed for production
 - **Benefits**: Centralized data location, simplified backups, consistent permissions
 - **Infrastructure**: The deployment system automatically creates this directory structure
 

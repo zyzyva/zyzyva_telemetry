@@ -153,6 +153,29 @@ if config_env() == :prod do
 end
 ```
 
+**For applications using SQLite**, add DATABASE_PATH configuration:
+```elixir
+# Additional configuration for SQLite repos
+database_path =
+  System.get_env("DATABASE_PATH") ||
+  raise """
+  environment variable DATABASE_PATH is missing.
+  For example: /opt/phoenix-data/sqlite/your_app/database.db
+  """
+
+config :your_app, YourApp.SQLiteRepo,
+  adapter: Ecto.Adapters.SQLite3,
+  database: database_path,
+  pool_size: 5
+```
+
+**SQLite Database Path Convention:**
+All SQLite databases in production follow a standardized path structure:
+- **Location**: `/opt/phoenix-data/sqlite/{app_name}/`
+- **Example**: `/opt/phoenix-data/sqlite/representation4us/database.db`
+- **Benefits**: Centralized data location, simplified backups, consistent permissions
+- **Infrastructure**: The deployment system automatically creates this directory structure
+
 ### 4. **Release Configuration & Migration Support**
 **Requirement**: Your app MUST be configured for Elixir releases AND have migration scripts generated.
 
@@ -200,6 +223,11 @@ defmodule YourApp.Release do
     load_app()
 
     for repo <- repos() do
+      # Create SQLite database if it doesn't exist (for SQLite repos only)
+      if sqlite_repo?(repo) do
+        ensure_sqlite_database_exists(repo)
+      end
+      
       {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
     end
   end
@@ -215,6 +243,27 @@ defmodule YourApp.Release do
 
   defp load_app do
     Application.load(@app)
+  end
+
+  # SQLite database creation and configuration
+  defp sqlite_repo?(repo) do
+    config = repo.config()
+    config[:adapter] == Ecto.Adapters.SQLite3
+  end
+
+  defp ensure_sqlite_database_exists(repo) do
+    config = repo.config()
+    db_path = config[:database]
+    
+    unless File.exists?(db_path) do
+      # Create parent directory
+      File.mkdir_p!(Path.dirname(db_path))
+      
+      # Create database with WAL mode enabled
+      {:ok, conn} = :sqlite3.open(String.to_charlist(db_path))
+      :sqlite3.exec(conn, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+      :sqlite3.close(conn)
+    end
   end
 end
 ```
@@ -240,6 +289,16 @@ The infrastructure worker needs to run database migrations automatically during 
 ```
 This ensures your database schema is updated before the new version starts serving traffic.
 
+**For PostgreSQL apps:** The provisioner creates the database, and migrations run against the existing database.
+
+**For SQLite apps:** The migration script creates the database file if it doesn't exist (including WAL mode configuration), then runs migrations. This handles the complete SQLite database lifecycle during deployment.
+
+**SQLite Database Management:**
+- **Standard Location**: All SQLite databases are created in `/opt/phoenix-data/sqlite/{app_name}/`
+- **WAL Mode**: Automatically configured for better concurrency and performance
+- **Backup Strategy**: The entire `/opt/phoenix-data/sqlite/` directory is backed up regularly by system-level processes
+- **Permissions**: Managed by deployment system to ensure `deploy` user access
+
 ---
 
 ## 🔧 Deployment Integration
@@ -261,7 +320,6 @@ Your app will be deployed as a systemd service. Ensure:
 - Ensure your app doesn't require root permissions
 - Log files should write to `/var/log/your_app/` (will be created)
 
----
 
 ## 📁 Project File Requirements
 

@@ -25,30 +25,19 @@ defmodule ZyzyvaTelemetry.HealthController do
   end
 
   defp get_health_response do
-    case ZyzyvaTelemetry.AppMonitoring.get_health_status() do
-      {:ok, health_data} ->
-        body = format_health_data(health_data)
+    {:ok, health_data} = ZyzyvaTelemetry.AppMonitoring.get_health_status()
+    body = format_health_data(health_data)
 
-        status_code =
-          case health_data[:status] do
-            :healthy -> 200
-            :ok -> 200
-            :degraded -> 200
-            :critical -> 503
-            _ -> 503
-          end
+    status_code =
+      case health_data[:status] do
+        :healthy -> 200
+        :ok -> 200
+        :degraded -> 200
+        :critical -> 503
+        _ -> 503
+      end
 
-        {status_code, body}
-
-      {:error, _reason} ->
-        {503,
-         %{
-           status: "error",
-           service: get_service_name(),
-           message: "Monitoring system not available",
-           timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-         }}
-    end
+    {status_code, body}
   end
 
   defp format_health_data(data) do

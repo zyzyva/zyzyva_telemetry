@@ -4,11 +4,11 @@ defmodule ZyzyvaTelemetry.MixProject do
   def project do
     [
       app: :zyzyva_telemetry,
-      version: "0.1.0",
+      version: "1.0.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "Lightweight monitoring library for distributed Elixir applications",
+      description: "Shared observability library wrapping Prometheus, Tower, and Loki for the Botify ecosystem",
       package: package()
     ]
   end
@@ -23,8 +23,27 @@ defmodule ZyzyvaTelemetry.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:exqlite, "~> 0.33"},
-      {:plug, "~> 1.18"}
+      # Metrics (NEW)
+      {:prom_ex, "~> 1.11"},
+      {:telemetry, "~> 1.2"},
+      {:telemetry_metrics, "~> 1.0"},
+      {:telemetry_poller, "~> 1.1"},
+
+      # Error tracking (NEW)
+      {:tower, "~> 0.6"},
+
+      # Phoenix integration (KEEP)
+      {:plug, "~> 1.18"},
+      {:phoenix, "~> 1.7", optional: true},
+
+      # Ecto integration (NEW - optional)
+      {:ecto, "~> 3.10", optional: true},
+      {:ecto_sql, "~> 3.10", optional: true},
+
+      # Broadway integration (NEW - optional)
+      {:broadway, "~> 1.0", optional: true}
+
+      # REMOVED: {:exqlite, "~> 0.33"} # No longer needed
     ]
   end
 

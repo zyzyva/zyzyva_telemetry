@@ -9,23 +9,8 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
   Returns the most recent health check data.
   """
   def get_health_status do
-    case ZyzyvaTelemetry.get_health() do
-      {:error, :health_reporter_not_running} ->
-        # Return basic health info if reporter not running
-        {:ok,
-         %{
-           status: :unknown,
-           message: "Health reporter not initialized",
-           timestamp: DateTime.utc_now()
-         }}
-
-      health_data when is_map(health_data) ->
-        # Health reporter returns data directly
-        {:ok, health_data}
-
-      other ->
-        {:error, other}
-    end
+    health_data = ZyzyvaTelemetry.Health.Registry.check_health()
+    {:ok, health_data}
   end
 
   @doc """

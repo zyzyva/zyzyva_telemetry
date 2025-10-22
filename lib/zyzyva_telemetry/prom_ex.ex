@@ -22,8 +22,7 @@ defmodule ZyzyvaTelemetry.PromEx do
         base_plugins = [
           PromEx.Plugins.Beam,
           {PromEx.Plugins.Phoenix, router: unquote(opts[:router])},
-          {ZyzyvaTelemetry.Plugins.EcosystemMetrics,
-           service_name: unquote(opts[:service_name])}
+          {ZyzyvaTelemetry.Plugins.EcosystemMetrics, service_name: unquote(opts[:service_name])}
         ]
 
         # Add Ecto plugin if repos are provided

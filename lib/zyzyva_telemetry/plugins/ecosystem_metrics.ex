@@ -16,7 +16,6 @@ defmodule ZyzyvaTelemetry.Plugins.EcosystemMetrics do
         description: "Number of deployments",
         tags: [:service_name, :result]
       ),
-
       distribution(
         "ecosystem.business.duration",
         event_name: [:ecosystem, :business, :operation, :stop],
@@ -25,7 +24,6 @@ defmodule ZyzyvaTelemetry.Plugins.EcosystemMetrics do
         unit: {:native, :millisecond},
         buckets: [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
       ),
-
       counter(
         "ecosystem.error.count",
         event_name: [:ecosystem, :error, :logged],

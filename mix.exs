@@ -8,7 +8,8 @@ defmodule ZyzyvaTelemetry.MixProject do
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "Shared observability library wrapping Prometheus, Tower, and Loki for the Botify ecosystem",
+      description:
+        "Shared observability library wrapping Prometheus, Tower, and Loki for the Botify ecosystem",
       package: package()
     ]
   end

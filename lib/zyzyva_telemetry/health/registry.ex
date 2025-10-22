@@ -7,7 +7,8 @@ defmodule ZyzyvaTelemetry.Health.Registry do
   use GenServer
   require Logger
 
-  @check_interval 30_000  # 30 seconds default
+  # 30 seconds default
+  @check_interval 30_000
 
   # Client API
 
@@ -148,12 +149,15 @@ defmodule ZyzyvaTelemetry.Health.Registry do
     all_statuses = [memory[:status], processes[:status]]
 
     # Check custom results (boolean values mean healthy if true)
-    custom_ok = custom_results |> Map.values() |> Enum.all?(fn
-      true -> true
-      false -> false
-      %{status: status} -> status in [:ok, :healthy]
-      _ -> true
-    end)
+    custom_ok =
+      custom_results
+      |> Map.values()
+      |> Enum.all?(fn
+        true -> true
+        false -> false
+        %{status: status} -> status in [:ok, :healthy]
+        _ -> true
+      end)
 
     cond do
       :critical in all_statuses -> "critical"

@@ -24,25 +24,31 @@ defmodule ZyzyvaTelemetry.ErrorTracking do
   @impl true
   def init(opts) do
     service_name = Keyword.fetch!(opts, :service_name)
+    log_path = "/var/log/#{service_name}/errors.json"
 
-    # Configure Tower reporters
-    reporters = [
-      [
-        module: ZyzyvaTelemetry.Reporters.StructuredFile,
-        service_name: service_name,
-        log_path: "/var/log/#{service_name}/errors.json",
-        format: :json
-      ]
-    ]
+    # Store reporter options in process dictionary for the reporter to access
+    Process.put(:tower_reporter_opts,
+      service_name: service_name,
+      log_path: log_path
+    )
+
+    # Configure Tower with just the reporter module
+    # Tower v0.8 expects a list of reporter modules, not keyword lists
+    reporters = [ZyzyvaTelemetry.Reporters.StructuredFile]
 
     # Configure Tower via application environment
     Application.put_env(:tower, :reporters, reporters)
 
     # Attach Tower to the logger
-    :ok = Tower.attach()
+    case Tower.attach() do
+      :ok ->
+        Logger.info("Tower error tracking configured for #{service_name}")
+        {:ok, %{service_name: service_name, log_path: log_path}}
 
-    Logger.info("Tower error tracking configured for #{service_name}")
-
-    {:ok, %{service_name: service_name}}
+      {:error, reason} ->
+        Logger.warning("Tower attachment failed: #{inspect(reason)}")
+        # Continue without Tower - don't crash the app
+        {:ok, %{service_name: service_name, log_path: log_path, tower_attached: false}}
+    end
   end
 end

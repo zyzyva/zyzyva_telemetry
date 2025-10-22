@@ -9,6 +9,7 @@ defmodule ZyzyvaTelemetry.Reporters.StructuredFile do
   @impl Tower.Reporter
   def report_event(event) do
     opts = Process.get(:tower_reporter_opts, [])
+
     log_entry = %{
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
       service: opts[:service_name],
@@ -27,6 +28,7 @@ defmodule ZyzyvaTelemetry.Reporters.StructuredFile do
     log_path |> Path.dirname() |> File.mkdir_p!()
 
     # Append JSON line to log file
+    # Use native JSON module (Elixir 1.18+)
     File.write!(log_path, JSON.encode!(log_entry) <> "\n", [:append])
 
     :ok
@@ -41,18 +43,17 @@ defmodule ZyzyvaTelemetry.Reporters.StructuredFile do
   defp event_message(%{reason: reason}) when is_exception(reason) do
     Exception.message(reason)
   end
+
   defp event_message(%{message: message}), do: message
   defp event_message(_), do: "Unknown error"
 
   defp event_stacktrace(%{stacktrace: stacktrace}) when is_list(stacktrace) do
     Exception.format_stacktrace(stacktrace)
   end
+
   defp event_stacktrace(_), do: nil
 
   defp get_correlation_id do
-    case ZyzyvaTelemetry.Correlation.current() do
-      nil -> nil
-      correlation_id -> correlation_id
-    end
+    ZyzyvaTelemetry.Correlation.current()
   end
 end

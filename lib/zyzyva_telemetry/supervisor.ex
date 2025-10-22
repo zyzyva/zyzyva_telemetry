@@ -27,8 +27,7 @@ defmodule ZyzyvaTelemetry.Supervisor do
       # Tower error tracking
       {ZyzyvaTelemetry.ErrorTracking, opts},
 
-      # Correlation ID manager (keep from v1)
-      ZyzyvaTelemetry.Correlation,
+      # Correlation ID manager is a utility module, not a GenServer - removed from supervision tree
 
       # Health check registry
       {ZyzyvaTelemetry.Health.Registry, service_name: service_name}

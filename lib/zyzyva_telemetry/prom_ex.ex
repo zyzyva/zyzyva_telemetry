@@ -33,6 +33,14 @@ defmodule ZyzyvaTelemetry.PromEx do
             repos -> [{PromEx.Plugins.Ecto, repos: repos}]
           end
 
+        # Add Enhanced Ecto plugin if repos are provided (opt-in via config)
+        enhanced_ecto_plugins =
+          case unquote(opts[:repos]) do
+            nil -> []
+            [] -> []
+            repos -> [{ZyzyvaTelemetry.Plugins.EnhancedEcto, repos: repos}]
+          end
+
         # Add Broadway plugin if pipelines are provided
         broadway_plugins =
           case unquote(opts[:broadway_pipelines]) do
@@ -41,7 +49,14 @@ defmodule ZyzyvaTelemetry.PromEx do
             pipelines -> [{PromEx.Plugins.Broadway, pipelines: pipelines}]
           end
 
-        base_plugins ++ ecto_plugins ++ broadway_plugins
+        # Add Finch plugin (opt-in via config)
+        finch_plugins = [ZyzyvaTelemetry.Plugins.Finch]
+
+        # Add Enhanced Phoenix plugin (opt-in via config)
+        enhanced_phoenix_plugins = [ZyzyvaTelemetry.Plugins.EnhancedPhoenix]
+
+        base_plugins ++ ecto_plugins ++ enhanced_ecto_plugins ++ broadway_plugins ++
+          finch_plugins ++ enhanced_phoenix_plugins
       end
 
       @impl true

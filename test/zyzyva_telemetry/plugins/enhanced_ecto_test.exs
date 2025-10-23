@@ -4,6 +4,15 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEctoTest do
 
   alias ZyzyvaTelemetry.Plugins.EnhancedEcto
 
+  # Helper function to extract metrics from Event structs
+  defp extract_metrics(events) do
+    events
+    |> Enum.flat_map(fn
+      %{metrics: metrics} -> metrics
+      metric -> [metric]
+    end)
+  end
+
   describe "event_metrics/1" do
     test "returns empty metrics when all tracking disabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_ecto,
@@ -11,15 +20,16 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEctoTest do
         track_transactions: false
       )
 
-      metrics = EnhancedEcto.event_metrics([])
-      # Should only have slow query metrics (always included)
-      assert length(metrics) == 2
+      events = EnhancedEcto.event_metrics([])
+      # Should only have slow query event (always included)
+      assert length(events) == 1
     end
 
     test "includes query type metrics when enabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_ecto, track_query_types: true)
 
-      metrics = EnhancedEcto.event_metrics([])
+      events = EnhancedEcto.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
       assert [:zyzyva, :ecto, :query_by_type] in metric_names
     end
@@ -27,7 +37,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEctoTest do
     test "includes transaction metrics when enabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_ecto, track_transactions: true)
 
-      metrics = EnhancedEcto.event_metrics([])
+      events = EnhancedEcto.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
       assert [:zyzyva, :ecto, :transaction, :begin] in metric_names
       assert [:zyzyva, :ecto, :transaction, :commit] in metric_names

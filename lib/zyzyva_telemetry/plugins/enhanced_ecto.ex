@@ -55,27 +55,38 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEcto do
   ## Metrics Building
 
   defp build_metrics(config, opts) do
-    []
-    |> add_slow_query_metrics(opts)
-    |> add_query_type_metrics(config, opts)
-    |> add_transaction_metrics(config, opts)
+    [
+      slow_query_event(opts),
+      query_type_event(config, opts),
+      transaction_event(config, opts)
+    ]
+    |> Enum.reject(&is_nil/1)
   end
 
-  defp add_slow_query_metrics(metrics, _opts) do
-    metrics ++ slow_query_metrics()
+  defp slow_query_event(_opts) do
+    Event.build(
+      :enhanced_ecto_slow_query_metrics,
+      slow_query_metrics()
+    )
   end
 
-  defp add_query_type_metrics(metrics, %{track_query_types: true}, _opts) do
-    metrics ++ query_type_metrics()
+  defp query_type_event(%{track_query_types: true}, _opts) do
+    Event.build(
+      :enhanced_ecto_query_type_metrics,
+      query_type_metrics()
+    )
   end
 
-  defp add_query_type_metrics(metrics, _config, _opts), do: metrics
+  defp query_type_event(_config, _opts), do: nil
 
-  defp add_transaction_metrics(metrics, %{track_transactions: true}, _opts) do
-    metrics ++ transaction_metrics()
+  defp transaction_event(%{track_transactions: true}, _opts) do
+    Event.build(
+      :enhanced_ecto_transaction_metrics,
+      transaction_metrics()
+    )
   end
 
-  defp add_transaction_metrics(metrics, _config, _opts), do: metrics
+  defp transaction_event(_config, _opts), do: nil
 
   ## Event Handlers
   ##

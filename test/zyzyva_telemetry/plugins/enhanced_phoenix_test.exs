@@ -3,13 +3,22 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
 
   alias ZyzyvaTelemetry.Plugins.EnhancedPhoenix
 
+  # Helper function to extract metrics from Event structs
+  defp extract_metrics(events) do
+    events
+    |> Enum.flat_map(fn
+      %{metrics: metrics} -> metrics
+      metric -> [metric]
+    end)
+  end
+
   describe "event_metrics/1" do
     test "returns empty metrics when disabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_phoenix, enabled: false)
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
 
-      assert metrics == []
+      assert events == []
     end
 
     test "includes payload metrics when enabled" do
@@ -18,7 +27,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
         track_payload_sizes: true
       )
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       assert [:zyzyva, :phoenix, :payload] in metric_names
@@ -27,7 +37,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
     test "includes request type metrics when enabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_phoenix, enabled: true)
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
 
       # Should have request type count and duration
       payload_metrics =
@@ -42,7 +53,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
         track_payload_sizes: false
       )
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
 
       # Should still have request type metrics but not payload size metrics
       assert length(metrics) == 2
@@ -59,7 +71,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
         track_payload_sizes: true
       )
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
 
       Enum.each(metrics, fn metric ->
         assert metric.event_name == [:zyzyva, :phoenix, :payload]
@@ -74,7 +87,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
         track_payload_sizes: true
       )
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
 
       # Find distribution metrics (which have reporter_options)
       distribution_metrics =
@@ -100,7 +114,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
         track_payload_sizes: true
       )
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
 
       # When track_payload_sizes is true, we should have:
       # - 2 distributions (request_size, response_size)
@@ -122,7 +137,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
         track_payload_sizes: true
       )
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
 
       # All metrics should have request_type tag
       Enum.each(metrics, fn metric ->
@@ -148,7 +164,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
         track_payload_sizes: true
       )
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
 
       # Find summary metrics (they have a measurement function)
       summary_metrics =
@@ -168,7 +185,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenixTest do
         track_payload_sizes: true
       )
 
-      metrics = EnhancedPhoenix.event_metrics([])
+      events = EnhancedPhoenix.event_metrics([])
+      metrics = extract_metrics(events)
 
       # Find summary metric with a measurement function
       summary_metric =

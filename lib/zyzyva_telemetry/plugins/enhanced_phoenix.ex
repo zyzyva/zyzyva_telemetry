@@ -61,13 +61,16 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenix do
   defp build_metrics(%{enabled: false}), do: []
 
   defp build_metrics(config) do
-    []
-    |> add_payload_metrics(config)
-    |> add_request_type_metrics()
+    [
+      payload_size_event(config),
+      request_type_event()
+    ]
+    |> Enum.reject(&is_nil/1)
   end
 
-  defp add_payload_metrics(metrics, %{track_payload_sizes: true}) do
-    metrics ++
+  defp payload_size_event(%{track_payload_sizes: true}) do
+    Event.build(
+      :enhanced_phoenix_payload_metrics,
       [
         distribution(
           "phoenix.payload.request_size",
@@ -120,12 +123,14 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenix do
           unit: :byte
         )
       ]
+    )
   end
 
-  defp add_payload_metrics(metrics, _config), do: metrics
+  defp payload_size_event(_config), do: nil
 
-  defp add_request_type_metrics(metrics) do
-    metrics ++
+  defp request_type_event do
+    Event.build(
+      :enhanced_phoenix_request_type_metrics,
       [
         counter(
           "phoenix.request_type.count",
@@ -145,5 +150,6 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenix do
           ]
         )
       ]
+    )
   end
 end

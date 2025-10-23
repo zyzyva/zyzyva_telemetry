@@ -4,11 +4,21 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
 
   alias ZyzyvaTelemetry.Plugins.EnhancedLiveView
 
+  # Helper function to extract metrics from Event structs
+  defp extract_metrics(events) do
+    events
+    |> Enum.flat_map(fn
+      %{metrics: metrics} -> metrics
+      metric -> [metric]
+    end)
+  end
+
   describe "event_metrics/1" do
     test "returns empty metrics when disabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_live_view, enabled: false)
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
 
       assert metrics == []
     end
@@ -19,7 +29,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
         track_websocket: true
       )
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       assert [:phoenix, :live_view, :mount, :stop] in metric_names
@@ -31,7 +42,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
         track_websocket: false
       )
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
 
       # Should still have render, mount, and handle_event metrics
       assert length(metrics) > 0
@@ -45,7 +57,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
     test "includes render metrics when enabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_live_view, enabled: true)
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       assert [:phoenix, :live_view, :render, :stop] in metric_names
@@ -55,7 +68,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
     test "includes mount metrics when enabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_live_view, enabled: true)
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
 
       mount_metrics =
         Enum.filter(metrics, fn m ->
@@ -68,7 +82,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
     test "includes handle_event metrics when enabled" do
       Application.put_env(:zyzyva_telemetry, :enhanced_live_view, enabled: true)
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       assert [:phoenix, :live_view, :handle_event, :stop] in metric_names
@@ -77,7 +92,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
     test "all metrics have proper configuration" do
       Application.put_env(:zyzyva_telemetry, :enhanced_live_view, enabled: true)
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
 
       Enum.each(metrics, fn metric ->
         assert metric.event_name != nil
@@ -89,7 +105,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
     test "duration metrics have millisecond buckets" do
       Application.put_env(:zyzyva_telemetry, :enhanced_live_view, enabled: true)
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
 
       # Find distribution metrics with buckets
       distribution_metrics =
@@ -109,7 +126,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
     test "metrics have appropriate tags" do
       Application.put_env(:zyzyva_telemetry, :enhanced_live_view, enabled: true)
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
 
       # Most metrics should have :view tag
       view_tagged_metrics = Enum.filter(metrics, fn m -> :view in m.tags end)
@@ -265,7 +283,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
         track_websocket: true
       )
 
-      metrics = EnhancedLiveView.event_metrics([])
+      events = EnhancedLiveView.event_metrics([])
+      metrics = extract_metrics(events)
 
       Enum.each(metrics, fn metric ->
         assert is_atom(metric.__struct__)

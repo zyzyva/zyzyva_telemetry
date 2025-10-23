@@ -71,15 +71,18 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
   defp build_metrics(%{enabled: false}), do: []
 
   defp build_metrics(config) do
-    []
-    |> add_websocket_metrics(config)
-    |> add_render_metrics()
-    |> add_mount_metrics()
-    |> add_handle_event_metrics()
+    [
+      websocket_event(config),
+      render_event(),
+      mount_event(),
+      handle_event_event()
+    ]
+    |> Enum.reject(&is_nil/1)
   end
 
-  defp add_websocket_metrics(metrics, %{track_websocket: true}) do
-    metrics ++
+  defp websocket_event(%{track_websocket: true}) do
+    Event.build(
+      :enhanced_live_view_websocket_metrics,
       [
         distribution(
           "live_view.connection.duration",
@@ -99,12 +102,14 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
           tags: [:reason]
         )
       ]
+    )
   end
 
-  defp add_websocket_metrics(metrics, _config), do: metrics
+  defp websocket_event(_config), do: nil
 
-  defp add_render_metrics(metrics) do
-    metrics ++
+  defp render_event do
+    Event.build(
+      :enhanced_live_view_render_metrics,
       [
         distribution(
           "live_view.render.duration",
@@ -126,10 +131,12 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
           unit: :byte
         )
       ]
+    )
   end
 
-  defp add_mount_metrics(metrics) do
-    metrics ++
+  defp mount_event do
+    Event.build(
+      :enhanced_live_view_mount_metrics,
       [
         counter(
           "live_view.mount.count",
@@ -149,10 +156,12 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
           ]
         )
       ]
+    )
   end
 
-  defp add_handle_event_metrics(metrics) do
-    metrics ++
+  defp handle_event_event do
+    Event.build(
+      :enhanced_live_view_handle_event_metrics,
       [
         distribution(
           "live_view.handle_event.duration",
@@ -166,6 +175,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
           ]
         )
       ]
+    )
   end
 
   ## Polling Metrics Building

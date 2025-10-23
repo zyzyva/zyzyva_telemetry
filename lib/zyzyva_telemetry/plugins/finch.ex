@@ -61,15 +61,18 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
   defp build_metrics(%{enabled: false}), do: []
 
   defp build_metrics(config) do
-    []
-    |> add_request_metrics()
-    |> add_connection_metrics(config)
-    |> add_queue_metrics(config)
-    |> add_error_metrics()
+    [
+      request_event(),
+      connection_event(config),
+      queue_event(config),
+      error_event()
+    ]
+    |> Enum.reject(&is_nil/1)
   end
 
-  defp add_request_metrics(metrics) do
-    metrics ++
+  defp request_event do
+    Event.build(
+      :finch_request_metrics,
       [
         distribution(
           "finch.request.duration",
@@ -89,10 +92,12 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
           tags: [:scheme, :host, :port, :method, :status]
         )
       ]
+    )
   end
 
-  defp add_connection_metrics(metrics, %{track_connection_time: true}) do
-    metrics ++
+  defp connection_event(%{track_connection_time: true}) do
+    Event.build(
+      :finch_connection_metrics,
       [
         distribution(
           "finch.connection.duration",
@@ -112,12 +117,14 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
           tags: [:scheme, :host, :port]
         )
       ]
+    )
   end
 
-  defp add_connection_metrics(metrics, _config), do: metrics
+  defp connection_event(_config), do: nil
 
-  defp add_queue_metrics(metrics, %{track_queue_time: true}) do
-    metrics ++
+  defp queue_event(%{track_queue_time: true}) do
+    Event.build(
+      :finch_queue_metrics,
       [
         distribution(
           "finch.queue.duration",
@@ -131,12 +138,14 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
           ]
         )
       ]
+    )
   end
 
-  defp add_queue_metrics(metrics, _config), do: metrics
+  defp queue_event(_config), do: nil
 
-  defp add_error_metrics(metrics) do
-    metrics ++
+  defp error_event do
+    Event.build(
+      :finch_error_metrics,
       [
         counter(
           "finch.request.error.count",
@@ -157,6 +166,7 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
           tags: [:scheme, :host, :port, :error_kind]
         )
       ]
+    )
   end
 
   ## Event Handler Functions

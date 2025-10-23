@@ -4,11 +4,21 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
 
   alias ZyzyvaTelemetry.Plugins.Finch
 
+  # Helper function to extract metrics from Event structs
+  defp extract_metrics(events) do
+    events
+    |> Enum.flat_map(fn
+      %{metrics: metrics} -> metrics
+      metric -> [metric]
+    end)
+  end
+
   describe "event_metrics/1" do
     test "returns empty metrics when disabled" do
       Application.put_env(:zyzyva_telemetry, :finch, enabled: false)
 
-      metrics = Finch.event_metrics([])
+      events = Finch.event_metrics([])
+      metrics = extract_metrics(events)
 
       assert metrics == []
     end
@@ -16,7 +26,8 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
     test "includes request metrics when enabled" do
       Application.put_env(:zyzyva_telemetry, :finch, enabled: true)
 
-      metrics = Finch.event_metrics([])
+      events = Finch.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       assert [:finch, :request, :stop] in metric_names
@@ -28,7 +39,8 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
         track_connection_time: true
       )
 
-      metrics = Finch.event_metrics([])
+      events = Finch.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       assert [:finch, :connect, :stop] in metric_names
@@ -40,7 +52,8 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
         track_connection_time: false
       )
 
-      metrics = Finch.event_metrics([])
+      events = Finch.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       refute [:finch, :connect, :stop] in metric_names
@@ -52,7 +65,8 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
         track_queue_time: true
       )
 
-      metrics = Finch.event_metrics([])
+      events = Finch.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       assert [:finch, :queue, :stop] in metric_names
@@ -61,7 +75,8 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
     test "includes error metrics when enabled" do
       Application.put_env(:zyzyva_telemetry, :finch, enabled: true)
 
-      metrics = Finch.event_metrics([])
+      events = Finch.event_metrics([])
+      metrics = extract_metrics(events)
       metric_names = Enum.map(metrics, & &1.event_name)
 
       assert [:finch, :request, :exception] in metric_names
@@ -300,7 +315,8 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
     test "all metrics have required fields" do
       Application.put_env(:zyzyva_telemetry, :finch, enabled: true)
 
-      metrics = Finch.event_metrics([])
+      events = Finch.event_metrics([])
+      metrics = extract_metrics(events)
 
       Enum.each(metrics, fn metric ->
         assert metric.event_name != nil
@@ -312,7 +328,8 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
     test "request duration metric uses correct buckets" do
       Application.put_env(:zyzyva_telemetry, :finch, enabled: true)
 
-      metrics = Finch.event_metrics([])
+      events = Finch.event_metrics([])
+      metrics = extract_metrics(events)
 
       duration_metric =
         Enum.find(metrics, fn m ->

@@ -55,8 +55,11 @@ defmodule ZyzyvaTelemetry.PromEx do
         # Add Enhanced Phoenix plugin (opt-in via config)
         enhanced_phoenix_plugins = [ZyzyvaTelemetry.Plugins.EnhancedPhoenix]
 
+        # Add Enhanced LiveView plugin (opt-in via config)
+        enhanced_live_view_plugins = [ZyzyvaTelemetry.Plugins.EnhancedLiveView]
+
         base_plugins ++ ecto_plugins ++ enhanced_ecto_plugins ++ broadway_plugins ++
-          finch_plugins ++ enhanced_phoenix_plugins
+          finch_plugins ++ enhanced_phoenix_plugins ++ enhanced_live_view_plugins
       end
 
       @impl true

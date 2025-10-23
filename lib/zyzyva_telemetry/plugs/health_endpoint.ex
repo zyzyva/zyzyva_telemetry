@@ -96,11 +96,13 @@ if Code.ensure_loaded?(Plug) do
     end
 
     defp build_simple_response do
-      case ZyzyvaTelemetry.AppMonitoring.get_health_status() do
-        {:ok, %{status: status}} when status in [:healthy, :ok] ->
+      {:ok, health_data} = ZyzyvaTelemetry.AppMonitoring.get_health_status()
+
+      case health_data[:status] do
+        status when status in [:healthy, :ok, "healthy", "ok"] ->
           {200, %{status: "ok"}}
 
-        {:ok, %{status: :degraded}} ->
+        :degraded ->
           {200, %{status: "degraded"}}
 
         _ ->
@@ -109,33 +111,22 @@ if Code.ensure_loaded?(Plug) do
     end
 
     defp build_full_response(service_name) do
-      case ZyzyvaTelemetry.AppMonitoring.get_health_status() do
-        {:ok, health_data} ->
-          # Format the response
-          body = format_health_data(health_data, service_name)
+      {:ok, health_data} = ZyzyvaTelemetry.AppMonitoring.get_health_status()
 
-          # Determine HTTP status
-          status_code =
-            case health_data[:status] do
-              :healthy -> 200
-              :ok -> 200
-              :degraded -> 200
-              :critical -> 503
-              _ -> 503
-            end
+      # Format the response
+      body = format_health_data(health_data, service_name)
 
-          {status_code, body}
+      # Determine HTTP status
+      status_code =
+        case health_data[:status] do
+          :healthy -> 200
+          :ok -> 200
+          :degraded -> 200
+          :critical -> 503
+          _ -> 503
+        end
 
-        {:error, _reason} ->
-          # Fallback if monitoring not available
-          {503,
-           %{
-             status: "error",
-             service: to_string(service_name),
-             message: "Monitoring system not available",
-             timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-           }}
-      end
+      {status_code, body}
     end
 
     defp format_health_data(data, service_name) do

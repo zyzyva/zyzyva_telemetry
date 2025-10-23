@@ -56,6 +56,13 @@ defmodule ZyzyvaTelemetry.Correlation do
   end
 
   @doc """
+  Alias for get/0 - returns the current correlation ID.
+  """
+  def current do
+    get()
+  end
+
+  @doc """
   Sets the correlation ID in the process dictionary.
   """
   def set(correlation_id) do

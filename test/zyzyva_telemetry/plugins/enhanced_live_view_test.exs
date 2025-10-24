@@ -50,8 +50,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
 
       # But not connection.drop metrics
       refute Enum.any?(metrics, fn m ->
-        m.name == "live_view.connection.drop.count"
-      end)
+               m.name == "live_view.connection.drop.count"
+             end)
     end
 
     test "includes render metrics when enabled" do
@@ -240,8 +240,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
         %{}
       )
 
-      assert_receive {:telemetry_event, [:zyzyva, :live_view, :render, :complete], emitted_measurements,
-                      _metadata}
+      assert_receive {:telemetry_event, [:zyzyva, :live_view, :render, :complete],
+                      emitted_measurements, _metadata}
 
       assert emitted_measurements.diff_size > 0
       assert emitted_measurements.duration == 1000
@@ -269,8 +269,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
         %{}
       )
 
-      assert_receive {:telemetry_event, [:zyzyva, :live_view, :render, :complete], emitted_measurements,
-                      _metadata}
+      assert_receive {:telemetry_event, [:zyzyva, :live_view, :render, :complete],
+                      emitted_measurements, _metadata}
 
       assert emitted_measurements.diff_size == 0
     end

@@ -232,8 +232,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
       {:dictionary, dict} ->
         # LiveView processes have specific keys in their process dictionary
         Keyword.has_key?(dict, :"$callers") ||
-          Keyword.has_key?(dict, :"$initial_call") &&
-            is_phoenix_live_view_process?(dict)
+          (Keyword.has_key?(dict, :"$initial_call") &&
+             is_phoenix_live_view_process?(dict))
 
       _ ->
         false

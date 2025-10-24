@@ -247,8 +247,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEctoTest do
         %{}
       )
 
-      assert_receive {:telemetry_event, [:zyzyva, :ecto, :transaction, :rollback], %{count: 1},
-                      _}
+      assert_receive {:telemetry_event, [:zyzyva, :ecto, :transaction, :rollback], %{count: 1}, _}
     end
   end
 

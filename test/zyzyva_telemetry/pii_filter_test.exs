@@ -161,7 +161,7 @@ defmodule ZyzyvaTelemetry.PIIFilterTest do
 
     test "rejects non-strings" do
       refute PIIFilter.credit_card?(nil)
-      refute PIIFilter.credit_card?(123456)
+      refute PIIFilter.credit_card?(123_456)
     end
   end
 

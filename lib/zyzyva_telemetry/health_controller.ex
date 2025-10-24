@@ -28,17 +28,39 @@ defmodule ZyzyvaTelemetry.HealthController do
     {:ok, health_data} = ZyzyvaTelemetry.AppMonitoring.get_health_status()
     body = format_health_data(health_data)
 
+    # Normalize status to atom for comparison (handles both string and atom inputs)
+    status = normalize_status(health_data[:status])
+
     status_code =
-      case health_data[:status] do
+      case status do
         :healthy -> 200
         :ok -> 200
         :degraded -> 200
+        :warning -> 200
+        :starting -> 200
         :critical -> 503
         _ -> 503
       end
 
     {status_code, body}
   end
+
+  # Convert status to atom, handling both string and atom inputs
+  defp normalize_status(status) when is_binary(status) do
+    case status do
+      "healthy" -> :healthy
+      "ok" -> :ok
+      "degraded" -> :degraded
+      "warning" -> :warning
+      "starting" -> :starting
+      "critical" -> :critical
+      "unknown" -> :unknown
+      _ -> :unknown
+    end
+  end
+
+  defp normalize_status(status) when is_atom(status), do: status
+  defp normalize_status(_), do: :unknown
 
   defp format_health_data(data) do
     # Start with standard fields

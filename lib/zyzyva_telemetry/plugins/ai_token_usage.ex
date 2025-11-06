@@ -113,8 +113,11 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
   5. **Check metric names**: In Prometheus, metric names use underscores, not dots.
      Look for `ai_token_usage_prompt_tokens_total`, not `ai.token.usage.prompt_tokens.total`.
 
-  6. **Tags must be atoms**: The `tags` parameter in counter definitions must be a list
-     of atoms like `[:provider, :model]`, not a custom function.
+  6. **Tags must be atoms**: The `tags` parameter must be a list of atoms like
+     `[:provider, :model]`, not a custom function.
+
+  7. **Use sum, not counter**: Token metrics must use `sum/2` to accumulate token values.
+     Using `counter/2` only counts events (increments by 1), not the actual token amounts.
   """
 
   use PromEx.Plugin
@@ -155,7 +158,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
       :ai_token_usage_metrics,
       [
         # Prompt tokens (input to AI)
-        counter(
+        sum(
           "ai.token.usage.prompt_tokens.total",
           event_name: [:zyzyva, :ai, :token_usage],
           measurement: :prompt_tokens,
@@ -164,7 +167,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         ),
 
         # Completion tokens (output from AI)
-        counter(
+        sum(
           "ai.token.usage.completion_tokens.total",
           event_name: [:zyzyva, :ai, :token_usage],
           measurement: :completion_tokens,
@@ -173,7 +176,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         ),
 
         # Total tokens
-        counter(
+        sum(
           "ai.token.usage.total_tokens.total",
           event_name: [:zyzyva, :ai, :token_usage],
           measurement: :total_tokens,
@@ -182,7 +185,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         ),
 
         # Cached tokens
-        counter(
+        sum(
           "ai.token.usage.cached_tokens.total",
           event_name: [:zyzyva, :ai, :token_usage],
           measurement: :cached_tokens,

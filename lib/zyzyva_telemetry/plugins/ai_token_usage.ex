@@ -108,7 +108,8 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
   defp build_metrics(%{enabled: false}), do: []
 
   defp build_metrics(config) do
-    # Support multiple event name patterns
+    # Support multiple event name patterns - use a list of patterns per metric
+    # instead of creating duplicate metrics
     event_patterns = [
       [:_, :ai, :_],
       [:_, :ocr, :_],
@@ -116,14 +117,12 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
       [:_, :chat, :_]
     ]
 
-    Enum.flat_map(event_patterns, fn pattern ->
-      [
-        token_usage_event(pattern, config)
-      ]
-    end)
+    [
+      token_usage_event(event_patterns, config)
+    ]
   end
 
-  defp token_usage_event(event_pattern, config) do
+  defp token_usage_event(event_patterns, config) do
     tags = build_tags(config)
 
     Event.build(
@@ -132,7 +131,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         # Prompt tokens (input to AI)
         counter(
           [:ai, :token, :usage, :prompt_tokens, :total],
-          event_name: event_pattern,
+          event_name: event_patterns,
           measurement: :prompt_tokens,
           description: "Total prompt tokens sent to AI providers",
           tags: tags,
@@ -142,7 +141,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         # Completion tokens (output from AI)
         counter(
           [:ai, :token, :usage, :completion_tokens, :total],
-          event_name: event_pattern,
+          event_name: event_patterns,
           measurement: :completion_tokens,
           description: "Total completion tokens received from AI providers",
           tags: tags,
@@ -152,7 +151,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         # Total tokens
         counter(
           [:ai, :token, :usage, :total_tokens, :total],
-          event_name: event_pattern,
+          event_name: event_patterns,
           measurement: :total_tokens,
           description: "Total tokens (prompt + completion) used by AI providers",
           tags: tags,
@@ -163,7 +162,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         if config.track_cached_tokens do
           counter(
             [:ai, :token, :usage, :cached_tokens, :total],
-            event_name: event_pattern,
+            event_name: event_patterns,
             measurement: :cached_tokens,
             description: "Total cached prompt tokens served by AI providers (cost savings)",
             tags: tags,

@@ -24,12 +24,14 @@ defmodule ZyzyvaTelemetry.Reporters.StructuredFile do
 
     log_path = opts[:log_path]
 
-    # Ensure directory exists
-    log_path |> Path.dirname() |> File.mkdir_p!()
+    if log_path do
+      # Ensure directory exists
+      log_path |> Path.dirname() |> File.mkdir_p!()
 
-    # Append JSON line to log file
-    # Use native JSON module (Elixir 1.18+)
-    File.write!(log_path, JSON.encode!(log_entry) <> "\n", [:append])
+      # Append JSON line to log file
+      # Use native JSON module (Elixir 1.18+)
+      File.write!(log_path, JSON.encode!(log_entry) <> "\n", [:append])
+    end
 
     :ok
   end

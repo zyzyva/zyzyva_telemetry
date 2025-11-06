@@ -97,7 +97,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
 
   defp get_config do
     Application.get_env(:zyzyva_telemetry, :ai_token_usage, [])
-    |> Keyword.put_new(:enabled, false)
+    |> Keyword.put_new(:enabled, true)
     |> Keyword.put_new(:track_by_model, true)
     |> Keyword.put_new(:track_cached_tokens, true)
     |> Enum.into(%{})
@@ -105,17 +105,14 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
 
   ## Metrics Building
 
-  defp build_metrics(%{enabled: false}), do: []
-
-  defp build_metrics(config) do
-    # Create a single event group that listens specifically to OCR events
-    # (the main use case). Can be extended for other AI patterns later.
+  defp build_metrics(_config) do
+    # Always build metrics - enabled by default
     [
-      token_usage_event(config)
+      token_usage_event()
     ]
   end
 
-  defp token_usage_event(_config) do
+  defp token_usage_event do
     # Use specific wildcard pattern for OCR: [:_, :ocr, :_]
     # This avoids duplicate metrics while still being flexible
     Event.build(

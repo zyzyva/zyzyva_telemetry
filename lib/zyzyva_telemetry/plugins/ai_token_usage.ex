@@ -115,9 +115,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
     ]
   end
 
-  defp token_usage_event(config) do
-    tags = build_tags(config)
-
+  defp token_usage_event(_config) do
     # Use specific wildcard pattern for OCR: [:_, :ocr, :_]
     # This avoids duplicate metrics while still being flexible
     Event.build(
@@ -129,8 +127,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
           event_name: [:_, :ocr, :_],
           measurement: :prompt_tokens,
           description: "Total prompt tokens sent to AI providers",
-          tags: tags,
-          tag_values: &extract_tags(&1, config)
+          tags: [:provider, :model, :feature]
         ),
 
         # Completion tokens (output from AI)
@@ -139,8 +136,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
           event_name: [:_, :ocr, :_],
           measurement: :completion_tokens,
           description: "Total completion tokens received from AI providers",
-          tags: tags,
-          tag_values: &extract_tags(&1, config)
+          tags: [:provider, :model, :feature]
         ),
 
         # Total tokens
@@ -149,44 +145,18 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
           event_name: [:_, :ocr, :_],
           measurement: :total_tokens,
           description: "Total tokens (prompt + completion) used by AI providers",
-          tags: tags,
-          tag_values: &extract_tags(&1, config)
+          tags: [:provider, :model, :feature]
         ),
 
-        # Cached tokens (if enabled)
-        if config.track_cached_tokens do
-          counter(
-            "ai.token.usage.cached_tokens.total",
-            event_name: [:_, :ocr, :_],
-            measurement: :cached_tokens,
-            description: "Total cached prompt tokens served by AI providers (cost savings)",
-            tags: tags,
-            tag_values: &extract_tags(&1, config)
-          )
-        end
+        # Cached tokens
+        counter(
+          "ai.token.usage.cached_tokens.total",
+          event_name: [:_, :ocr, :_],
+          measurement: :cached_tokens,
+          description: "Total cached prompt tokens served by AI providers (cost savings)",
+          tags: [:provider, :model, :feature]
+        )
       ]
-      |> Enum.reject(&is_nil/1)
     )
-  end
-
-  defp build_tags(%{track_by_model: true}) do
-    [:provider, :model, :feature]
-  end
-
-  defp build_tags(_config) do
-    [:provider, :feature]
-  end
-
-  defp extract_tags(metadata, config) do
-    base_tags = %{
-      provider: Map.get(metadata, :provider, "unknown"),
-      feature: Map.get(metadata, :feature, "unknown")
-    }
-
-    if config.track_by_model do
-      Map.put(base_tags, :model, Map.get(metadata, :model, "unknown"))
-    else
-      base_tags
-    end
   end
 end

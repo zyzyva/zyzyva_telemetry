@@ -125,7 +125,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
       [
         # Prompt tokens (input to AI)
         counter(
-          [:ai, :token, :usage, :prompt_tokens, :total],
+          "ai.token.usage.prompt_tokens.total",
           event_name: [:_, :ocr, :_],
           measurement: :prompt_tokens,
           description: "Total prompt tokens sent to AI providers",
@@ -135,7 +135,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
 
         # Completion tokens (output from AI)
         counter(
-          [:ai, :token, :usage, :completion_tokens, :total],
+          "ai.token.usage.completion_tokens.total",
           event_name: [:_, :ocr, :_],
           measurement: :completion_tokens,
           description: "Total completion tokens received from AI providers",
@@ -145,7 +145,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
 
         # Total tokens
         counter(
-          [:ai, :token, :usage, :total_tokens, :total],
+          "ai.token.usage.total_tokens.total",
           event_name: [:_, :ocr, :_],
           measurement: :total_tokens,
           description: "Total tokens (prompt + completion) used by AI providers",
@@ -156,7 +156,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         # Cached tokens (if enabled)
         if config.track_cached_tokens do
           counter(
-            [:ai, :token, :usage, :cached_tokens, :total],
+            "ai.token.usage.cached_tokens.total",
             event_name: [:_, :ocr, :_],
             measurement: :cached_tokens,
             description: "Total cached prompt tokens served by AI providers (cost savings)",

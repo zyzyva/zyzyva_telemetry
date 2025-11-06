@@ -115,15 +115,14 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
   end
 
   defp token_usage_event do
-    # Use specific wildcard pattern for OCR: [:_, :ocr, :_]
-    # This avoids duplicate metrics while still being flexible
+    # Listen to library-namespaced event that applications should emit
     Event.build(
       :ai_token_usage_metrics,
       [
         # Prompt tokens (input to AI)
         counter(
           "ai.token.usage.prompt_tokens.total",
-          event_name: [:_, :ocr, :_],
+          event_name: [:zyzyva, :ai, :token_usage],
           measurement: :prompt_tokens,
           description: "Total prompt tokens sent to AI providers",
           tags: [:provider, :model, :feature]
@@ -132,7 +131,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         # Completion tokens (output from AI)
         counter(
           "ai.token.usage.completion_tokens.total",
-          event_name: [:_, :ocr, :_],
+          event_name: [:zyzyva, :ai, :token_usage],
           measurement: :completion_tokens,
           description: "Total completion tokens received from AI providers",
           tags: [:provider, :model, :feature]
@@ -141,7 +140,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         # Total tokens
         counter(
           "ai.token.usage.total_tokens.total",
-          event_name: [:_, :ocr, :_],
+          event_name: [:zyzyva, :ai, :token_usage],
           measurement: :total_tokens,
           description: "Total tokens (prompt + completion) used by AI providers",
           tags: [:provider, :model, :feature]
@@ -150,7 +149,7 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
         # Cached tokens
         counter(
           "ai.token.usage.cached_tokens.total",
-          event_name: [:_, :ocr, :_],
+          event_name: [:zyzyva, :ai, :token_usage],
           measurement: :cached_tokens,
           description: "Total cached prompt tokens served by AI providers (cost savings)",
           tags: [:provider, :model, :feature]

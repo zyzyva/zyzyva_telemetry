@@ -191,6 +191,14 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
           measurement: :cached_tokens,
           description: "Total cached prompt tokens served by AI providers (cost savings)",
           tags: [:provider, :model, :feature]
+        ),
+
+        # Event count (number of API calls)
+        counter(
+          "ai.token.usage.events.total",
+          event_name: [:zyzyva, :ai, :token_usage],
+          description: "Total number of AI API calls/events",
+          tags: [:provider, :model, :feature]
         )
       ]
     )

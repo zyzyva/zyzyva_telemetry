@@ -11,16 +11,22 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
   ## Configuration
 
       config :zyzyva_telemetry, :ai_token_usage,
-        enabled: false,                  # Opt-in by default
+        enabled: true,                   # Enabled by default
         track_by_model: true,            # Track metrics per AI model
         track_cached_tokens: true        # Track prompt caching separately
 
   ## Telemetry Events
 
-  Your application should emit telemetry events in this format:
+  **IMPORTANT**: Your application must emit events using the exact event name
+  `[:zyzyva, :ai, :token_usage]`. This is the library-namespaced event that
+  the plugin listens to.
+
+  **NOTE**: Telemetry.Metrics does NOT support wildcard patterns in event names.
+  Patterns like `[:_, :ai, :_]` or `[:your_app, :*, :token_usage]` will not work.
+  You must use the exact event name `[:zyzyva, :ai, :token_usage]`.
 
       :telemetry.execute(
-        [:your_app, :ai, :completion],  # or [:your_app, :ocr, :token_usage]
+        [:zyzyva, :ai, :token_usage],   # Must use exact event name - wildcards don't work
         %{
           prompt_tokens: 1234,
           completion_tokens: 567,
@@ -43,15 +49,18 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
 
   ## Metrics Provided
 
-  - `ai.token.usage.prompt_tokens.total` - Total input tokens sent to AI
-  - `ai.token.usage.completion_tokens.total` - Total output tokens from AI
-  - `ai.token.usage.total_tokens.total` - Combined token usage
-  - `ai.token.usage.cached_tokens.total` - Cached tokens (cost savings)
+  - `ai_token_usage_prompt_tokens_total` - Total input tokens sent to AI
+  - `ai_token_usage_completion_tokens_total` - Total output tokens from AI
+  - `ai_token_usage_total_tokens_total` - Combined token usage
+  - `ai_token_usage_cached_tokens_total` - Cached tokens (cost savings)
 
   All metrics tagged with:
   - `provider` - AI provider (OpenAI, Mistral, Anthropic, etc.)
-  - `model` - AI model name (if track_by_model enabled)
-  - `feature` - Application feature using AI (if provided)
+  - `model` - AI model name
+  - `feature` - Application feature using AI
+
+  **NOTE**: Metric names in Prometheus use underscores (e.g. `ai_token_usage_prompt_tokens_total`),
+  not dots. The dots in metric definitions get converted to underscores by the Prometheus reporter.
 
   ## Example Usage
 
@@ -59,11 +68,12 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
 
       # In your OCR handler
       :telemetry.execute(
-        [:contacts4us, :ocr, :token_usage],
+        [:zyzyva, :ai, :token_usage],
         %{
           prompt_tokens: usage["prompt_tokens"],
           completion_tokens: usage["completion_tokens"],
-          total_tokens: usage["total_tokens"]
+          total_tokens: usage["total_tokens"],
+          cached_tokens: get_in(usage, ["prompt_tokens_details", "cached_tokens"]) || 0
         },
         %{provider: "OpenAI", model: "gpt-4o", feature: "business_card_scanner"}
       )
@@ -71,15 +81,40 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
   ### Chat Completion
 
       :telemetry.execute(
-        [:my_app, :ai, :chat],
+        [:zyzyva, :ai, :token_usage],
         %{
           prompt_tokens: 150,
           completion_tokens: 75,
           total_tokens: 225,
           cached_tokens: 50
         },
-        %{provider: "Anthropic", model: "claude-3-5-sonnet"}
+        %{provider: "Anthropic", model: "claude-3-5-sonnet", feature: "chat"}
       )
+
+  ## Troubleshooting
+
+  If metrics aren't appearing in Prometheus:
+
+  1. **Check event name**: Must be exactly `[:zyzyva, :ai, :token_usage]`.
+     App-specific event names like `[:my_app, :ocr, :token_usage]` won't work.
+
+  2. **No wildcards**: Event names like `[:_, :ai, :_]` don't work in Telemetry.Metrics.
+     Wildcards only work with `:telemetry.attach/4`, not metric definitions.
+
+  3. **Check configuration**: Plugin is enabled by default. If you set `enabled: false`,
+     no metrics will be collected.
+
+  4. **Verify telemetry execution**: Add logging to confirm events are being emitted:
+     ```
+     result = :telemetry.execute([:zyzyva, :ai, :token_usage], measurements, metadata)
+     Logger.info("Telemetry event emitted: \#{inspect(result)}")
+     ```
+
+  5. **Check metric names**: In Prometheus, metric names use underscores, not dots.
+     Look for `ai_token_usage_prompt_tokens_total`, not `ai.token.usage.prompt_tokens.total`.
+
+  6. **Tags must be atoms**: The `tags` parameter in counter definitions must be a list
+     of atoms like `[:provider, :model]`, not a custom function.
   """
 
   use PromEx.Plugin

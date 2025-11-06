@@ -84,6 +84,8 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
 
   use PromEx.Plugin
 
+  import Telemetry.Metrics
+
   @impl true
   def event_metrics(_opts) do
     config = get_config()

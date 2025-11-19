@@ -9,7 +9,8 @@ defmodule ZyzyvaTelemetry.PromEx do
           otp_app: :my_app,
           service_name: "my_app",
           router: MyAppWeb.Router,
-          repos: [MyApp.Repo]
+          repos: [MyApp.Repo],
+          additional_plugins: [MyApp.CustomPlugin]
       end
   """
 
@@ -61,6 +62,15 @@ defmodule ZyzyvaTelemetry.PromEx do
         # Add AI Token Usage plugin (opt-in via config)
         ai_token_usage_plugins = [ZyzyvaTelemetry.Plugins.AiTokenUsage]
 
+        # Add additional custom plugins if provided
+        additional_plugins =
+          case unquote(opts[:additional_plugins]) do
+            nil -> []
+            [] -> []
+            plugins when is_list(plugins) -> plugins
+            plugin -> [plugin]
+          end
+
         base_plugins ++
           ecto_plugins ++
           enhanced_ecto_plugins ++
@@ -68,7 +78,8 @@ defmodule ZyzyvaTelemetry.PromEx do
           finch_plugins ++
           enhanced_phoenix_plugins ++
           enhanced_live_view_plugins ++
-          ai_token_usage_plugins
+          ai_token_usage_plugins ++
+          additional_plugins
       end
 
       @impl true

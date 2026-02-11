@@ -3,9 +3,15 @@ defmodule ZyzyvaTelemetry.Reporters.Loki do
   Pushes errors directly to Loki via HTTP API.
   No Promtail needed - logs go straight from application to Loki.
 
-  Configuration:
-  - loki_url: URL of Loki instance (e.g., "http://100.104.83.12:3100")
-  - service_name: Name of the service (e.g., "botify")
+  Configure via Application env:
+
+      config :zyzyva_telemetry, ZyzyvaTelemetry.Reporters.Loki,
+        loki_url: "http://loki:3100",
+        service_name: "my_app"
+
+  Then add the module to Tower's reporters list:
+
+      config :tower, reporters: [ZyzyvaTelemetry.Reporters.Loki]
 
   Loki Push API format:
   https://grafana.com/docs/loki/latest/api/#push-log-entries-to-loki
@@ -17,7 +23,7 @@ defmodule ZyzyvaTelemetry.Reporters.Loki do
 
   @impl Tower.Reporter
   def report_event(event) do
-    opts = Process.get(:tower_reporter_opts, [])
+    opts = Application.get_env(:zyzyva_telemetry, __MODULE__, [])
 
     loki_url = opts[:loki_url]
     service_name = opts[:service_name]

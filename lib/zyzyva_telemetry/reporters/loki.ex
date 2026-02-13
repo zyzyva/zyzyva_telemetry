@@ -55,7 +55,7 @@ defmodule ZyzyvaTelemetry.Reporters.Loki do
       message: event_message(event),
       stacktrace: event_stacktrace(event),
       correlation_id: get_correlation_id(),
-      metadata: Map.get(event, :metadata, %{}),
+      metadata: event |> Map.get(:metadata, %{}) |> sanitize_for_json(),
       node: Node.self() |> to_string()
     }
     |> JSON.encode!()
@@ -122,4 +122,23 @@ defmodule ZyzyvaTelemetry.Reporters.Loki do
       correlation_id -> correlation_id
     end
   end
+
+  defp sanitize_for_json(value) when is_map(value) do
+    Map.new(value, fn {k, v} -> {k, sanitize_for_json(v)} end)
+  end
+
+  defp sanitize_for_json(value) when is_list(value) do
+    Enum.map(value, &sanitize_for_json/1)
+  end
+
+  defp sanitize_for_json(value) when is_pid(value), do: inspect(value)
+  defp sanitize_for_json(value) when is_port(value), do: inspect(value)
+  defp sanitize_for_json(value) when is_reference(value), do: inspect(value)
+  defp sanitize_for_json(value) when is_function(value), do: inspect(value)
+
+  defp sanitize_for_json(value) when is_tuple(value) do
+    value |> Tuple.to_list() |> sanitize_for_json()
+  end
+
+  defp sanitize_for_json(value), do: value
 end

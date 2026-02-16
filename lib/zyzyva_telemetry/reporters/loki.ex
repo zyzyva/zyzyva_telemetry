@@ -108,6 +108,7 @@ defmodule ZyzyvaTelemetry.Reporters.Loki do
   defp event_message(%{reason: reason}) when is_exception(reason) do
     Exception.message(reason)
   end
+  defp event_message(%{reason: reason}) when is_binary(reason), do: reason
   defp event_message(%{message: message}), do: message
   defp event_message(_), do: "Unknown error"
 

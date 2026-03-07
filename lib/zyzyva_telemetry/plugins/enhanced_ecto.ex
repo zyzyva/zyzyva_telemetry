@@ -132,7 +132,13 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEcto do
   # Pattern match on result to determine query type
   defp classify_query(_source, %{num_rows: num} = _result) when is_integer(num), do: :select
   defp classify_query(_source, {:ok, _}), do: :write
-  defp classify_query(_source, %Ecto.Schema.Metadata{}), do: :write
+
+  defp classify_query(_source, %{__struct__: struct}) do
+    if Code.ensure_loaded?(Ecto.Schema.Metadata) and struct == Ecto.Schema.Metadata,
+      do: :write,
+      else: :unknown
+  end
+
   defp classify_query(_source, _), do: :unknown
 
   ## Slow Query Detection

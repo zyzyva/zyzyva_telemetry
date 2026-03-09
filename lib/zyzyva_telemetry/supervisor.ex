@@ -31,10 +31,22 @@ defmodule ZyzyvaTelemetry.Supervisor do
         # Correlation ID manager is a utility module, not a GenServer - removed from supervision tree
 
         # Health check registry
-        {ZyzyvaTelemetry.Health.Registry, service_name: service_name}
+        {ZyzyvaTelemetry.Health.Registry, service_name: service_name},
+
+        # Loki logger (if configured)
+        loki_logger_child(service_name)
       ]
       |> Enum.filter(&(&1 != nil))
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp loki_logger_child(service_name) do
+    loki_opts = Application.get_env(:zyzyva_telemetry, ZyzyvaTelemetry.LokiLogger, [])
+
+    case loki_opts[:loki_url] do
+      nil -> nil
+      _url -> {ZyzyvaTelemetry.LokiLogger, Keyword.put(loki_opts, :service_name, service_name)}
+    end
   end
 end

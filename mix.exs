@@ -32,6 +32,9 @@ defmodule ZyzyvaTelemetry.MixProject do
       # Error tracking (NEW)
       {:tower, "~> 0.6"},
 
+      # HTTP client for Loki
+      {:req, "~> 0.5"},
+
       # Phoenix integration (KEEP)
       {:plug, "~> 1.18"},
       {:phoenix, "~> 1.7", optional: true},

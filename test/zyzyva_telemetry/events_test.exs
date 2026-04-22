@@ -65,6 +65,49 @@ defmodule ZyzyvaTelemetry.EventsTest do
       log = capture_log(fn -> Events.track_pageview("home") end)
       assert log =~ "pageview: home"
     end
+
+    test "passes full UTM set to Loki via :event_fields metadata" do
+      {:ok, _pid} =
+        ZyzyvaTelemetry.LokiLogger.start_link(
+          loki_url: nil,
+          service_name: "test_app",
+          flush_interval: 60_000,
+          min_level: :info
+        )
+
+      acq =
+        Acquisition.build(
+          "https://example.com/some-ref",
+          %{
+            "utm_source" => "test_claude",
+            "utm_medium" => "cpc",
+            "utm_campaign" => "launch_apr",
+            "utm_content" => "hero-a",
+            "utm_term" => "openclaw"
+          },
+          "/landing"
+        )
+
+      Acquisition.set(acq)
+
+      capture_log(fn ->
+        Events.track_pageview("home")
+        Process.sleep(50)
+      end)
+
+      state = :sys.get_state(ZyzyvaTelemetry.LokiLogger)
+      assert state.buffer_size >= 1
+      [entry | _] = state.buffer
+      log_line = entry.log_line
+
+      assert log_line["utm_source"] == "test_claude"
+      assert log_line["utm_medium"] == "cpc"
+      assert log_line["utm_campaign"] == "launch_apr"
+      assert log_line["utm_content"] == "hero-a"
+      assert log_line["utm_term"] == "openclaw"
+      assert log_line["landing_path"] == "/landing"
+      assert log_line["referer"] == "https://example.com/some-ref"
+    end
   end
 
   describe "track_funnel_step/3" do
@@ -142,4 +185,5 @@ defmodule ZyzyvaTelemetry.EventsTest do
 
     id
   end
+
 end

@@ -33,7 +33,9 @@ defmodule ZyzyvaTelemetry.Events do
       `ZyzyvaTelemetry.Acquisition.current/0` (defaults to `"unknown"` if no
       acquisition plug ran on this request)
     * `correlation_id` — from `ZyzyvaTelemetry.Correlation.current/0` when set
-    * `utm_campaign`, `utm_content`, `utm_term` — from `Acquisition.current/0` when set
+    * `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`,
+      `landing_path`, `referer` — from `Acquisition.current/0` when set.
+      These ride only to Loki; Prom tags use the bucketed `source` instead.
     * `timestamp` — UTC ISO8601
 
   ## Prometheus cardinality contract
@@ -164,10 +166,13 @@ defmodule ZyzyvaTelemetry.Events do
     case Acquisition.current() do
       %{} = acq ->
         %{
+          utm_source: acq[:utm_source],
+          utm_medium: acq[:utm_medium],
           utm_campaign: acq[:utm_campaign],
           utm_content: acq[:utm_content],
           utm_term: acq[:utm_term],
-          landing_path: acq[:landing_path]
+          landing_path: acq[:landing_path],
+          referer: acq[:referer]
         }
 
       _ ->

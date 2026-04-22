@@ -36,6 +36,10 @@ defmodule ZyzyvaTelemetry.Events do
     * `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`,
       `landing_path`, `referer` — from `Acquisition.current/0` when set.
       These ride only to Loki; Prom tags use the bucketed `source` instead.
+    * `country`, `region`, `city`, `postal_code`, `timezone`, `ip`,
+      `user_agent`, `device_type` — geo + device enrichment captured by
+      `ZyzyvaTelemetry.Plugs.AcquisitionTracker` from Cloudflare `cf-*`
+      headers and the user-agent. Loki only.
     * `timestamp` — UTC ISO8601
 
   ## Prometheus cardinality contract
@@ -172,7 +176,15 @@ defmodule ZyzyvaTelemetry.Events do
           utm_content: acq[:utm_content],
           utm_term: acq[:utm_term],
           landing_path: acq[:landing_path],
-          referer: acq[:referer]
+          referer: acq[:referer],
+          country: acq[:country],
+          region: acq[:region],
+          city: acq[:city],
+          postal_code: acq[:postal_code],
+          timezone: acq[:timezone],
+          ip: acq[:ip],
+          user_agent: acq[:user_agent],
+          device_type: acq[:device_type]
         }
 
       _ ->

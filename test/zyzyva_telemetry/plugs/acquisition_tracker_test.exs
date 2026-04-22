@@ -126,4 +126,82 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
     assert get_session(conn, "source_attribution").source == :social_linkedin
     assert get_session(conn, "acquisition") == nil
   end
+
+  describe "geo + device enrichment" do
+    test "extracts Cloudflare geo headers into acquisition" do
+      conn =
+        build_conn_with_session(:get, "/")
+        |> put_req_header("cf-connecting-ip", "203.0.113.42")
+        |> put_req_header("cf-ipcountry", "US")
+        |> put_req_header("cf-region-code", "TN")
+        |> put_req_header("cf-ipcity", "Elizabethton")
+        |> put_req_header("cf-postal-code", "37643")
+        |> put_req_header("cf-timezone", "America/New_York")
+        |> put_req_header("user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)")
+        |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+
+      acq = get_session(conn, "acquisition")
+      assert acq.country == "US"
+      assert acq.region == "TN"
+      assert acq.city == "Elizabethton"
+      assert acq.postal_code == "37643"
+      assert acq.timezone == "America/New_York"
+      assert acq.ip == "203.0.113.42"
+      assert acq.user_agent =~ "iPhone"
+      assert acq.device_type == :mobile
+    end
+
+    test "drops CF sentinel country codes XX and T1" do
+      conn =
+        build_conn_with_session(:get, "/")
+        |> put_req_header("cf-ipcountry", "XX")
+        |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+
+      assert get_session(conn, "acquisition").country == nil
+    end
+
+    test "classifies device types from user-agent" do
+      ua_types = [
+        {"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)", :mobile},
+        {"Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)", :tablet},
+        {"Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile Safari/537.36", :mobile},
+        {"Mozilla/5.0 (Linux; Android 14; SM-T870) Safari/537.36", :tablet},
+        {"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", :desktop},
+        {"Googlebot/2.1 (+http://www.google.com/bot.html)", :bot},
+        {"curl/8.1.0", :bot}
+      ]
+
+      for {ua, expected} <- ua_types do
+        conn =
+          build_conn_with_session(:get, "/")
+          |> put_req_header("user-agent", ua)
+          |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+
+        acq = get_session(conn, "acquisition")
+
+        assert acq.device_type == expected,
+               "#{ua} => expected #{expected}, got #{acq.device_type}"
+      end
+    end
+
+    test "falls back to x-forwarded-for when cf-connecting-ip absent" do
+      conn =
+        build_conn_with_session(:get, "/")
+        |> put_req_header("x-forwarded-for", "198.51.100.7, 10.0.0.1")
+        |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+
+      assert get_session(conn, "acquisition").ip == "198.51.100.7"
+    end
+
+    test "enrichment fields are nil when headers absent" do
+      conn =
+        build_conn_with_session(:get, "/")
+        |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+
+      acq = get_session(conn, "acquisition")
+      assert acq.country == nil
+      assert acq.city == nil
+      assert acq.device_type == nil
+    end
+  end
 end

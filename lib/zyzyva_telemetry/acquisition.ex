@@ -30,11 +30,22 @@ defmodule ZyzyvaTelemetry.Acquisition do
         utm_campaign: "launch",
         utm_content: "headline-a",
         utm_term: "openclaw setup",
+        country: "US",
+        region: "TN",
+        city: "Elizabethton",
+        postal_code: "37643",
+        timezone: "America/New_York",
+        ip: "203.0.113.42",
+        user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0...)",
+        device_type: :mobile,
         first_touch_at: ~U[2026-04-17 14:32:00Z]
       }
 
-  All UTM fields are `nil` when absent. Cardinality for `source` is fixed; do not
-  tag Prometheus counters with the raw `referer` or `utm_*` fields.
+  All UTM, geo, and device fields are `nil` when absent. Cardinality for
+  `source` is fixed; do not tag Prometheus counters with the raw `referer`,
+  `utm_*`, `city`, `ip`, or `user_agent` fields — they belong in Loki only.
+  `country` and `device_type` have bounded cardinality and are safe for Prom
+  tags if you need geo/device breakdowns in PromQL.
   """
 
   @acquisition_key :zyzyva_telemetry_acquisition
@@ -56,6 +67,8 @@ defmodule ZyzyvaTelemetry.Acquisition do
           | :gbp
           | :referral_other
 
+  @type device_type :: :mobile | :tablet | :desktop | :bot | :unknown
+
   @type t :: %{
           source: source(),
           referer: String.t() | nil,
@@ -65,23 +78,43 @@ defmodule ZyzyvaTelemetry.Acquisition do
           utm_campaign: String.t() | nil,
           utm_content: String.t() | nil,
           utm_term: String.t() | nil,
+          country: String.t() | nil,
+          region: String.t() | nil,
+          city: String.t() | nil,
+          postal_code: String.t() | nil,
+          timezone: String.t() | nil,
+          ip: String.t() | nil,
+          user_agent: String.t() | nil,
+          device_type: device_type() | nil,
           first_touch_at: DateTime.t()
         }
 
   @utm_keys ~w(utm_source utm_medium utm_campaign utm_content utm_term)
+  @enrichment_keys ~w(country region city postal_code timezone ip user_agent device_type)a
 
   @doc """
   Build an acquisition map from a referer URL and query params.
 
   `params` is typically the parsed query string from the landing request.
   `landing_path` is the initial URL path the visitor hit.
+  `enrichment` (optional) is a map with any of `country`, `region`, `city`,
+  `postal_code`, `timezone`, `ip`, `user_agent`, `device_type` keys — typically
+  extracted by `ZyzyvaTelemetry.Plugs.AcquisitionTracker` from Cloudflare
+  `cf-*` headers and the `user-agent` header.
   """
-  @spec build(String.t() | nil, map(), String.t() | nil, DateTime.t()) :: t()
-  def build(referer, params, landing_path, now \\ DateTime.utc_now()) do
+  @spec build(String.t() | nil, map(), String.t() | nil, map(), DateTime.t()) :: t()
+  def build(referer, params, landing_path, enrichment \\ %{}, now \\ DateTime.utc_now())
+
+  def build(referer, params, landing_path, %DateTime{} = now, _) do
+    # Backward-compat 4-arg form: (referer, params, landing_path, now)
+    build(referer, params, landing_path, %{}, now)
+  end
+
+  def build(referer, params, landing_path, enrichment, now) when is_map(enrichment) do
     utms = extract_utms(params)
     source = classify(referer, utms)
 
-    %{
+    base = %{
       source: source,
       referer: normalize_referer(referer),
       landing_path: landing_path,
@@ -92,6 +125,10 @@ defmodule ZyzyvaTelemetry.Acquisition do
       utm_term: utms["utm_term"],
       first_touch_at: now
     }
+
+    Enum.reduce(@enrichment_keys, base, fn key, acc ->
+      Map.put(acc, key, Map.get(enrichment, key))
+    end)
   end
 
   @doc """
@@ -135,36 +172,83 @@ defmodule ZyzyvaTelemetry.Acquisition do
   defp classify_host(host) do
     cond do
       # Mail clients FIRST — mail.google.com must beat the generic google. match
-      String.contains?(host, "mail.google.") -> :email
-      String.contains?(host, "mail.yahoo.") -> :email
-      String.contains?(host, "outlook.") -> :email
-      String.contains?(host, "proton.me") -> :email
-      String.contains?(host, "fastmail.") -> :email
+      String.contains?(host, "mail.google.") ->
+        :email
+
+      String.contains?(host, "mail.yahoo.") ->
+        :email
+
+      String.contains?(host, "outlook.") ->
+        :email
+
+      String.contains?(host, "proton.me") ->
+        :email
+
+      String.contains?(host, "fastmail.") ->
+        :email
+
       # Google Business Profile / Maps — must beat the generic google. match
-      String.contains?(host, "maps.google.") -> :gbp
-      String.contains?(host, "business.google.") -> :gbp
+      String.contains?(host, "maps.google.") ->
+        :gbp
+
+      String.contains?(host, "business.google.") ->
+        :gbp
+
       # Search engines
-      String.contains?(host, "google.") -> :search_google
-      String.contains?(host, "bing.") -> :search_bing
-      String.contains?(host, "duckduckgo.") -> :search_ddg
-      String.contains?(host, "yahoo.") -> :search_other
-      String.contains?(host, "ecosia.") -> :search_other
-      String.contains?(host, "kagi.") -> :search_other
-      String.contains?(host, "brave.") -> :search_other
+      String.contains?(host, "google.") ->
+        :search_google
+
+      String.contains?(host, "bing.") ->
+        :search_bing
+
+      String.contains?(host, "duckduckgo.") ->
+        :search_ddg
+
+      String.contains?(host, "yahoo.") ->
+        :search_other
+
+      String.contains?(host, "ecosia.") ->
+        :search_other
+
+      String.contains?(host, "kagi.") ->
+        :search_other
+
+      String.contains?(host, "brave.") ->
+        :search_other
+
       # Social
-      String.contains?(host, "linkedin.") -> :social_linkedin
+      String.contains?(host, "linkedin.") ->
+        :social_linkedin
+
       host == "t.co" or String.contains?(host, "twitter.") or String.contains?(host, "x.com") ->
         :social_x
+
       String.contains?(host, "facebook.") or host == "l.facebook.com" or host == "lm.facebook.com" ->
         :social_facebook
-      String.contains?(host, "reddit.") or host == "out.reddit.com" -> :social_reddit
-      String.contains?(host, "youtube.") or host == "youtu.be" -> :social_youtube
-      String.contains?(host, "instagram.") -> :social_instagram
-      String.contains?(host, "threads.net") -> :social_other
-      String.contains?(host, "tiktok.") -> :social_other
-      String.contains?(host, "bsky.") or String.contains?(host, "bluesky.") -> :social_other
-      String.contains?(host, "mastodon.") -> :social_other
-      true -> :referral_other
+
+      String.contains?(host, "reddit.") or host == "out.reddit.com" ->
+        :social_reddit
+
+      String.contains?(host, "youtube.") or host == "youtu.be" ->
+        :social_youtube
+
+      String.contains?(host, "instagram.") ->
+        :social_instagram
+
+      String.contains?(host, "threads.net") ->
+        :social_other
+
+      String.contains?(host, "tiktok.") ->
+        :social_other
+
+      String.contains?(host, "bsky.") or String.contains?(host, "bluesky.") ->
+        :social_other
+
+      String.contains?(host, "mastodon.") ->
+        :social_other
+
+      true ->
+        :referral_other
     end
   end
 

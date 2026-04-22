@@ -87,23 +87,107 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTracker do
   end
 
   defp build_from_conn(conn) do
-    referer =
-      case get_req_header(conn, "referer") do
-        [value | _] -> value
-        _ -> nil
-      end
+    referer = first_header(conn, "referer")
+    enrichment = extract_enrichment(conn)
 
-    Acquisition.build(referer, conn.query_params, conn.request_path)
+    Acquisition.build(referer, conn.query_params, conn.request_path, enrichment)
   end
+
+  defp extract_enrichment(conn) do
+    user_agent = first_header(conn, "user-agent")
+
+    %{
+      country: cf_header(conn, "cf-ipcountry"),
+      region: cf_header(conn, "cf-region-code") || cf_header(conn, "cf-region"),
+      city: cf_header(conn, "cf-ipcity"),
+      postal_code: cf_header(conn, "cf-postal-code"),
+      timezone: cf_header(conn, "cf-timezone"),
+      ip: cf_header(conn, "cf-connecting-ip") || client_ip_fallback(conn),
+      user_agent: user_agent,
+      device_type: classify_device(user_agent)
+    }
+  end
+
+  # CF sets country as literal "XX" when it cannot determine it.
+  # T1 means Tor exit node. Drop both — they're noise in Loki.
+  defp cf_header(conn, name) do
+    case first_header(conn, name) do
+      nil -> nil
+      "" -> nil
+      "XX" -> nil
+      "T1" -> nil
+      value -> value
+    end
+  end
+
+  defp first_header(conn, name) do
+    case get_req_header(conn, name) do
+      [value | _] -> value
+      _ -> nil
+    end
+  end
+
+  defp client_ip_fallback(conn) do
+    case first_header(conn, "x-forwarded-for") do
+      nil ->
+        conn.remote_ip && conn.remote_ip |> :inet.ntoa() |> to_string()
+
+      xff ->
+        xff |> String.split(",") |> List.first() |> String.trim()
+    end
+  end
+
+  # Cheap UA classification — no external deps. 95% accurate for our purposes;
+  # add `ua_inspector` later if you need browser/OS breakdowns.
+  defp classify_device(nil), do: nil
+  defp classify_device(""), do: nil
+
+  defp classify_device(ua) when is_binary(ua) do
+    ua = String.downcase(ua)
+
+    cond do
+      bot?(ua) -> :bot
+      tablet?(ua) -> :tablet
+      mobile?(ua) -> :mobile
+      true -> :desktop
+    end
+  end
+
+  defp bot?(ua),
+    do:
+      String.contains?(ua, "bot") or
+        String.contains?(ua, "crawler") or
+        String.contains?(ua, "spider") or
+        String.contains?(ua, "headlesschrome") or
+        String.contains?(ua, "lighthouse") or
+        String.contains?(ua, "slurp") or
+        String.contains?(ua, "curl/") or
+        String.contains?(ua, "wget/")
+
+  defp tablet?(ua),
+    do:
+      String.contains?(ua, "ipad") or
+        (String.contains?(ua, "android") and not String.contains?(ua, "mobile"))
+
+  defp mobile?(ua),
+    do:
+      String.contains?(ua, "mobile") or
+        String.contains?(ua, "iphone") or
+        String.contains?(ua, "ipod") or
+        String.contains?(ua, "android") or
+        String.contains?(ua, "windows phone") or
+        String.contains?(ua, "blackberry")
 
   defp utm_present?(params) when is_map(params) do
     Enum.any?(
       ~w(utm_source utm_medium utm_campaign utm_content utm_term),
-      fn key -> case Map.get(params, key) do
-        nil -> false
-        "" -> false
-        _ -> true
-      end end
+      fn key ->
+        case Map.get(params, key) do
+          nil -> false
+          "" -> false
+          _ -> true
+        end
+      end
     )
   end
 

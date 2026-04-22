@@ -156,6 +156,66 @@ defmodule ZyzyvaTelemetry.LokiLoggerTest do
     end
   end
 
+  describe "event_fields passthrough" do
+    test "merges event_fields metadata into the formatted log line" do
+      {:ok, _pid} =
+        LokiLogger.start_link(
+          loki_url: nil,
+          service_name: "test",
+          flush_interval: 60_000,
+          min_level: :info
+        )
+
+      capture_log(fn ->
+        require Logger
+
+        Logger.info("pageview: home",
+          event_fields: %{
+            event_type: "pageview",
+            page_type: "home",
+            source: :search_google,
+            utm_campaign: "launch_apr"
+          }
+        )
+
+        Process.sleep(50)
+      end)
+
+      state = :sys.get_state(LokiLogger)
+      assert state.buffer_size >= 1
+
+      [entry | _] = state.buffer
+      log_line = entry.log_line
+
+      assert log_line["event_type"] == "pageview"
+      assert log_line["page_type"] == "home"
+      # atoms get stringified for JSON safety
+      assert log_line["source"] == "search_google"
+      assert log_line["utm_campaign"] == "launch_apr"
+      # base fields still present
+      assert log_line.service == "test"
+    end
+
+    test "handles missing event_fields gracefully" do
+      {:ok, _pid} =
+        LokiLogger.start_link(
+          loki_url: nil,
+          service_name: "test",
+          flush_interval: 60_000,
+          min_level: :info
+        )
+
+      capture_log(fn ->
+        require Logger
+        Logger.info("no structured fields")
+        Process.sleep(50)
+      end)
+
+      state = :sys.get_state(LokiLogger)
+      assert state.buffer_size >= 1
+    end
+  end
+
   describe "handler cleanup" do
     test "removes handler on terminate" do
       {:ok, pid} = LokiLogger.start_link(loki_url: nil, service_name: "test")

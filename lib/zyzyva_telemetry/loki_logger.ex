@@ -155,20 +155,27 @@ defmodule ZyzyvaTelemetry.LokiLogger do
 
     message = format_message(log_event)
 
+    base = %{
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+      service: service_name,
+      level: level,
+      message: message,
+      module: meta[:mfa] |> format_mfa(),
+      file: meta[:file] |> to_string_safe(),
+      line: meta[:line],
+      pid: meta[:pid] |> inspect_safe(),
+      request_id: meta[:request_id],
+      correlation_id: get_correlation_id(),
+      node: Node.self() |> to_string()
+    }
+
+    # Callers can attach structured attribution/event data via Logger metadata
+    # under :event_fields — merge it into the log line so LogQL can filter on
+    # `page_type`, `source`, `utm_campaign`, etc. Caller fields win over the
+    # base fields above so callers can override e.g. `correlation_id`.
     log_line =
-      %{
-        timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-        service: service_name,
-        level: level,
-        message: message,
-        module: meta[:mfa] |> format_mfa(),
-        file: meta[:file] |> to_string_safe(),
-        line: meta[:line],
-        pid: meta[:pid] |> inspect_safe(),
-        request_id: meta[:request_id],
-        correlation_id: get_correlation_id(),
-        node: Node.self() |> to_string()
-      }
+      base
+      |> Map.merge(normalize_event_fields(meta[:event_fields]))
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
       |> Map.new()
 
@@ -195,6 +202,20 @@ defmodule ZyzyvaTelemetry.LokiLogger do
 
   defp format_mfa({m, f, a}), do: "#{inspect(m)}.#{f}/#{a}"
   defp format_mfa(_), do: nil
+
+  defp normalize_event_fields(nil), do: %{}
+
+  defp normalize_event_fields(map) when is_map(map) do
+    Map.new(map, fn {k, v} -> {to_string(k), normalize_event_value(v)} end)
+  end
+
+  defp normalize_event_fields(_), do: %{}
+
+  defp normalize_event_value(v) when is_binary(v) or is_number(v) or is_boolean(v) or is_nil(v),
+    do: v
+
+  defp normalize_event_value(v) when is_atom(v), do: Atom.to_string(v)
+  defp normalize_event_value(v), do: inspect(v)
 
   defp to_string_safe(nil), do: nil
   defp to_string_safe(val) when is_binary(val), do: val

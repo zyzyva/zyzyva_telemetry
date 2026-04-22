@@ -71,7 +71,11 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTracker do
     acquisition =
       cond do
         existing && !(refresh_on_utm and has_new_utms?) ->
-          existing
+          # Preserve first-touch source/utm/referer/landing_path, but patch
+          # in request-time enrichment (geo, device, ip, user_agent) so
+          # sessions established before enrichment existed — or with an older
+          # IP/device — get updated values without losing first-touch credit.
+          refresh_enrichment(existing, conn)
 
         true ->
           build_from_conn(conn)
@@ -84,6 +88,11 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTracker do
     else
       conn
     end
+  end
+
+  defp refresh_enrichment(existing, conn) do
+    enrichment = extract_enrichment(conn)
+    Map.merge(existing, enrichment)
   end
 
   defp build_from_conn(conn) do

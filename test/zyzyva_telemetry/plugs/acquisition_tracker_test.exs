@@ -203,5 +203,44 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
       assert acq.city == nil
       assert acq.device_type == nil
     end
+
+    test "refreshes enrichment on existing session while preserving first-touch" do
+      # First request: establish first-touch from linkedin, no CF headers
+      first =
+        build_conn_with_session(:get, "/landing?utm_source=linkedin", "https://linkedin.com/")
+        |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+
+      first_acq = get_session(first, "acquisition")
+      assert first_acq.source == :social_linkedin
+      assert first_acq.country == nil
+
+      # Second request from the same session: CF now sending geo headers.
+      # Session cookie carries first-touch forward; geo should be patched in.
+      second =
+        conn(:get, "/about")
+        |> Map.put(:secret_key_base, String.duplicate("a", 64))
+        |> Plug.Session.call(@session_opts)
+        |> fetch_session()
+        |> put_session("acquisition", first_acq)
+        |> put_req_header("cf-ipcountry", "US")
+        |> put_req_header("cf-region-code", "TN")
+        |> put_req_header("cf-ipcity", "Elizabethton")
+        |> put_req_header("user-agent", "Mozilla/5.0 (Macintosh)")
+        |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+
+      second_acq = get_session(second, "acquisition")
+
+      # First-touch preserved
+      assert second_acq.source == :social_linkedin
+      assert second_acq.utm_source == "linkedin"
+      assert second_acq.landing_path == "/landing"
+      assert second_acq.first_touch_at == first_acq.first_touch_at
+
+      # Enrichment updated
+      assert second_acq.country == "US"
+      assert second_acq.region == "TN"
+      assert second_acq.city == "Elizabethton"
+      assert second_acq.device_type == :desktop
+    end
   end
 end

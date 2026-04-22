@@ -156,6 +156,82 @@ health = ZyzyvaTelemetry.get_health()
 # Returns: %{status: "healthy", service: "my_app", ...}
 ```
 
+### Marketing Attribution (pageviews, funnel steps, conversions)
+
+`ZyzyvaTelemetry.Events` + `ZyzyvaTelemetry.Plugins.FunnelMetrics` give every
+Zyzyva app the same attribution API. First-touch acquisition (UTM + referrer
+bucket) rides along automatically via `ZyzyvaTelemetry.Acquisition`.
+
+**1. Configure service name:**
+
+```elixir
+# config/config.exs
+config :zyzyva_telemetry, service_name: "my_app"
+```
+
+**2. Capture first-touch acquisition on every request:**
+
+```elixir
+# router.ex
+pipeline :browser do
+  plug :accepts, ["html"]
+  plug :fetch_session
+  plug ZyzyvaTelemetry.Plugs.AcquisitionTracker
+  # ...
+end
+```
+
+**3. Enable the PromEx plugin:**
+
+```elixir
+defmodule MyApp.PromEx do
+  use ZyzyvaTelemetry.PromEx,
+    otp_app: :my_app,
+    service_name: "my_app",
+    router: MyAppWeb.Router,
+    repos: [MyApp.Repo],
+    additional_plugins: [ZyzyvaTelemetry.Plugins.FunnelMetrics]
+end
+```
+
+**4. Emit events from your app:**
+
+```elixir
+ZyzyvaTelemetry.Events.track_pageview("home")
+ZyzyvaTelemetry.Events.track_pageview("blog_post", %{slug: "my-post"})
+ZyzyvaTelemetry.Events.track_funnel_step("consultant", "gate_unlocked")
+ZyzyvaTelemetry.Events.track_conversion("contact_form")
+```
+
+**Prometheus counters exposed (bounded cardinality):**
+
+- `zyzyva_funnel_pageviews_total{service, page_type, source}`
+- `zyzyva_funnel_steps_total{service, funnel, step, source}`
+- `zyzyva_funnel_conversions_total{service, conversion_type, source}`
+
+**Loki query patterns (full cardinality — slug, utm_campaign, etc.):**
+
+```logql
+# Pageviews for a blog post across the ecosystem
+{job="logs"} | json | event_type="pageview" | page_type="blog_post" | slug="my-post"
+
+# Conversions attributed to a specific campaign
+{job="logs"} | json | event_type="conversion" | utm_campaign="launch_apr"
+
+# Funnel trace for a visitor session via correlation_id
+{job="logs"} | json | correlation_id="abc-123"
+```
+
+To ship attribution events to Loki, set `min_level: :info` on the
+`LokiLogger` (the default is `:warning`):
+
+```elixir
+config :zyzyva_telemetry, ZyzyvaTelemetry.LokiLogger,
+  loki_url: System.get_env("LOKI_URL"),
+  service_name: "my_app",
+  min_level: :info
+```
+
 ## Integration with Monitoring Stack
 
 This library is designed to work with the Botify ecosystem monitoring stack:

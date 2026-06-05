@@ -148,6 +148,37 @@ defmodule ZyzyvaTelemetry.EventsTest do
     end
   end
 
+  describe "track_feedback/2" do
+    test "emits telemetry with feedback_type tag" do
+      id = attach_capture([:zyzyva_telemetry, :feedback, :received])
+
+      capture_log(fn -> Events.track_feedback("bug_report") end)
+
+      assert_receive {_event, %{count: 1}, metadata}
+      assert metadata.feedback_type == "bug_report"
+      assert metadata.service == "test_app"
+      :telemetry.detach(id)
+    end
+
+    test "message includes feedback_type" do
+      log = capture_log(fn -> Events.track_feedback("bug_report") end)
+      assert log =~ "feedback: bug_report"
+    end
+
+    test "caller metadata (subject, message) stays out of telemetry tags" do
+      id = attach_capture([:zyzyva_telemetry, :feedback, :received])
+
+      capture_log(fn ->
+        Events.track_feedback("general", %{subject: "hi", message: "there"})
+      end)
+
+      assert_receive {_event, _measurements, metadata}
+      refute Map.has_key?(metadata, :subject)
+      refute Map.has_key?(metadata, :message)
+      :telemetry.detach(id)
+    end
+  end
+
   describe "source fallback" do
     test "source is 'unknown' when no Acquisition set" do
       id = attach_capture([:zyzyva_telemetry, :funnel, :pageview])
@@ -185,5 +216,4 @@ defmodule ZyzyvaTelemetry.EventsTest do
 
     id
   end
-
 end

@@ -232,6 +232,55 @@ config :zyzyva_telemetry, ZyzyvaTelemetry.LokiLogger,
   min_level: :info
 ```
 
+### Feedback alerts (Telegram + Loki)
+
+`ZyzyvaTelemetry.Feedback.report/1` is the entry point for inbound user
+feedback / bug reports. Call it from your feedback context after a successful
+insert — it does two things:
+
+1. Records a structured `event_type="feedback"` line to Loki (the durable
+   queue a triage agent can read back), plus a Prometheus counter.
+2. Fires a **best-effort** Telegram alert so you see the report arrive live.
+
+```elixir
+# In your feedback context, after the insert succeeds:
+ZyzyvaTelemetry.Feedback.report(%{
+  type: feedback.type,          # "bug_report" | "feature_request" | ...
+  subject: feedback.subject,
+  message: feedback.message,
+  id: feedback.id,
+  user_id: feedback.user_id
+})
+```
+
+Configure the bot once (reuses the same Telegram bot as the Grafana alerts):
+
+```elixir
+# config/runtime.exs
+config :zyzyva_telemetry, ZyzyvaTelemetry.Telegram,
+  bot_token: System.get_env("TELEGRAM_BOT_TOKEN"),
+  chat_id: System.get_env("TELEGRAM_CHAT_ID")
+```
+
+Notes:
+
+- **No-op when unconfigured.** With no `bot_token`/`chat_id`, the alert is
+  silently skipped and `report/1` still returns `:ok`. Feedback submission is
+  never blocked by an alert outage.
+- **Loki record needs `:info`.** The feedback log line is emitted at `:info`,
+  so it only reaches Loki when `LokiLogger` has `min_level: :info` (see the
+  attribution note above). The Telegram alert works regardless.
+- **Routing to its own room later.** All alerts share one bot + chat by
+  default. To split feedback into a dedicated Telegram room, point it at a
+  different `chat_id` — globally in config, or per call:
+
+  ```elixir
+  ZyzyvaTelemetry.Telegram.notify(text, chat_id: feedback_chat_id)
+  ```
+
+  A separate `bot_token` gives full isolation. No code change beyond the new
+  id/token.
+
 ## Integration with Monitoring Stack
 
 This library is designed to work with the Botify ecosystem monitoring stack:

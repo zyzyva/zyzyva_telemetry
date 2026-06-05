@@ -80,6 +80,7 @@ defmodule ZyzyvaTelemetry.Events do
   @event_pageview [:zyzyva_telemetry, :funnel, :pageview]
   @event_funnel_step [:zyzyva_telemetry, :funnel, :step]
   @event_conversion [:zyzyva_telemetry, :funnel, :conversion]
+  @event_feedback [:zyzyva_telemetry, :feedback, :received]
 
   @doc """
   Records a marketing-relevant page view.
@@ -117,6 +118,22 @@ defmodule ZyzyvaTelemetry.Events do
   def track_conversion(conversion_type, metadata \\ %{})
       when is_binary(conversion_type) and is_map(metadata) do
     emit(@event_conversion, "conversion", %{conversion_type: conversion_type}, metadata)
+  end
+
+  @doc """
+  Records inbound user feedback (bug report, feature request, review, …).
+
+  `feedback_type` should be a stable, low-cardinality string from your feedback
+  schema: `"bug_report"`, `"feature_request"`, `"suggestion"`, `"general"`,
+  `"review"`. High-cardinality context (subject, message, feedback_id, user_id)
+  goes in `metadata` and rides to Loki only, where a triage agent reads it via
+  `event_type="feedback"`. Prefer `ZyzyvaTelemetry.Feedback.report/1` at the
+  call site — it also fires the Telegram alert.
+  """
+  @spec track_feedback(String.t(), map()) :: :ok
+  def track_feedback(feedback_type, metadata \\ %{})
+      when is_binary(feedback_type) and is_map(metadata) do
+    emit(@event_feedback, "feedback", %{feedback_type: feedback_type}, metadata)
   end
 
   # ----------------------------------------------------------------------------
@@ -201,5 +218,6 @@ defmodule ZyzyvaTelemetry.Events do
   defp log_message("pageview", %{page_type: pt}), do: "pageview: #{pt}"
   defp log_message("funnel_step", %{funnel: f, step: s}), do: "funnel_step: #{f}/#{s}"
   defp log_message("conversion", %{conversion_type: c}), do: "conversion: #{c}"
+  defp log_message("feedback", %{feedback_type: t}), do: "feedback: #{t}"
   defp log_message(type, _), do: "event: #{type}"
 end

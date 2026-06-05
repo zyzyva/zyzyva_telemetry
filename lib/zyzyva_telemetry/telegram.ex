@@ -56,10 +56,26 @@ defmodule ZyzyvaTelemetry.Telegram do
         :ok
 
       :disabled ->
-        Logger.debug("[telegram] no bot_token/chat_id configured; skipping notify")
+        log_disabled(config())
         :ok
     end
   end
+
+  # No config block for this app/env — alerting is intentionally off (e.g. dev).
+  # Stay quiet so local runs aren't spammed.
+  defp log_disabled(nil),
+    do: Logger.debug("[telegram] not configured; skipping notify")
+
+  # A config block exists but bot_token/chat_id didn't resolve — alerting was
+  # wired but is misconfigured (e.g. env vars unset in prod). Emit a warning so
+  # it surfaces in Loki/Grafana (warnings ship under LokiLogger's default
+  # min_level) instead of silently dropping the alert.
+  defp log_disabled(_present),
+    do:
+      Logger.warning(
+        "[telegram] alerting enabled but bot_token/chat_id missing — alert dropped; " <>
+          "check TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID"
+      )
 
   @doc """
   Whether a bot token and chat id are currently configured.
@@ -108,5 +124,8 @@ defmodule ZyzyvaTelemetry.Telegram do
     e -> Logger.warning("[telegram] sendMessage raised: #{Exception.message(e)}")
   end
 
-  defp config, do: Application.get_env(:zyzyva_telemetry, __MODULE__, [])
+  # Returns nil when no config block exists (intentionally off), or the
+  # keyword list when one is present (so missing creds can be flagged). Reading
+  # keys off nil via Access is safe and yields nil.
+  defp config, do: Application.get_env(:zyzyva_telemetry, __MODULE__)
 end

@@ -61,6 +61,18 @@ defmodule ZyzyvaTelemetry.TelegramTest do
       capture_log(fn -> assert Telegram.notify("hi") == :ok end)
     end
 
+    test "notify/2 stays quiet when no config block exists (intentionally off)" do
+      Application.delete_env(:zyzyva_telemetry, Telegram)
+      log = capture_log(fn -> assert Telegram.notify("hi") == :ok end)
+      refute log =~ "alerting enabled"
+    end
+
+    test "notify/2 warns (ships to Loki) when wired but creds missing" do
+      Application.put_env(:zyzyva_telemetry, Telegram, bot_token: nil, chat_id: nil)
+      log = capture_log(fn -> assert Telegram.notify("hi") == :ok end)
+      assert log =~ "alerting enabled but bot_token/chat_id missing"
+    end
+
     test "configured?/0 reflects config presence" do
       Application.delete_env(:zyzyva_telemetry, Telegram)
       refute Telegram.configured?()

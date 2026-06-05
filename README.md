@@ -264,9 +264,14 @@ config :zyzyva_telemetry, ZyzyvaTelemetry.Telegram,
 
 Notes:
 
-- **No-op when unconfigured.** With no `bot_token`/`chat_id`, the alert is
-  silently skipped and `report/1` still returns `:ok`. Feedback submission is
-  never blocked by an alert outage.
+- **Fails safe, not silent.** `report/1` always returns `:ok` and never blocks
+  a feedback submit. With **no `ZyzyvaTelemetry.Telegram` config block** (e.g.
+  dev) the alert is quietly skipped. If the **block is present but
+  `bot_token`/`chat_id` don't resolve** (wired but misconfigured — env vars
+  unset in prod), it logs a **warning** that ships to Loki/Grafana, so a
+  dropped alert is visible instead of silent. Use `System.get_env/1` (not
+  `fetch_env!`) so a missing var degrades to this warning rather than crashing
+  boot.
 - **Loki record needs `:info`.** The feedback log line is emitted at `:info`,
   so it only reaches Loki when `LokiLogger` has `min_level: :info` (see the
   attribution note above). The Telegram alert works regardless.

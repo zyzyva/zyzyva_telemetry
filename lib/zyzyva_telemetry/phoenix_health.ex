@@ -51,106 +51,19 @@ defmodule ZyzyvaTelemetry.PhoenixHealth do
 
   defmacro __before_compile__(_env) do
     quote do
-      # Define an inline health controller module with unique name
+      # Define an inline health controller module with unique name. The response
+      # logic lives in ZyzyvaTelemetry.PhoenixHealth so this generated module
+      # stays thin.
       defmodule ZyzyvaTelemetryHealthController do
         @moduledoc false
         use Phoenix.Controller, namespace: false
 
         def health(conn, _params) do
-          {status_code, body} = get_health_response()
+          {status_code, body} = ZyzyvaTelemetry.PhoenixHealth.health_response(@health_format)
 
           conn
           |> put_resp_content_type("application/json")
           |> send_resp(status_code, JSON.encode!(body))
-        end
-
-        defp get_health_response do
-          format = @health_format
-
-          case ZyzyvaTelemetry.AppMonitoring.get_health_status() do
-            {:ok, health_data} when format == :simple ->
-              status = health_data[:status]
-
-              if status in [:healthy, :ok] do
-                {200, %{status: "ok"}}
-              else
-                {503, %{status: to_string(status)}}
-              end
-
-            {:ok, health_data} ->
-              # Full format
-              body = format_health_data(health_data)
-
-              status_code =
-                case health_data[:status] do
-                  :healthy -> 200
-                  :ok -> 200
-                  :degraded -> 200
-                  :critical -> 503
-                  _ -> 503
-                end
-
-              {status_code, body}
-
-            {:error, _reason} ->
-              {503,
-               %{
-                 status: "error",
-                 message: "Monitoring system not available",
-                 timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-               }}
-          end
-        end
-
-        defp format_health_data(data) do
-          %{
-            status: to_string(data[:status] || :unknown),
-            service: get_service_name(),
-            timestamp: format_timestamp(data[:timestamp]),
-            memory: format_memory(data[:memory]),
-            processes: data[:processes],
-            database_connected: data[:database_connected]
-          }
-          |> Map.merge(extract_custom_checks(data))
-          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-          |> Map.new()
-        end
-
-        defp get_service_name do
-          app = Application.get_application(__MODULE__)
-
-          case app do
-            {:ok, app_name} -> to_string(app_name)
-            _ -> "unknown"
-          end
-        end
-
-        defp format_timestamp(nil), do: DateTime.utc_now() |> DateTime.to_iso8601()
-        defp format_timestamp(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
-        defp format_timestamp(ts), do: to_string(ts)
-
-        defp format_memory(nil), do: nil
-
-        defp format_memory(%{mb: mb, status: status}) do
-          %{mb: mb, status: to_string(status)}
-        end
-
-        defp format_memory(memory), do: memory
-
-        defp extract_custom_checks(data) do
-          standard_fields = [
-            :status,
-            :timestamp,
-            :memory,
-            :processes,
-            :database_connected,
-            :rabbitmq_connected,
-            :message
-          ]
-
-          data
-          |> Enum.reject(fn {k, _v} -> k in standard_fields end)
-          |> Map.new()
         end
       end
 
@@ -163,5 +76,79 @@ defmodule ZyzyvaTelemetry.PhoenixHealth do
         get(@health_path, ZyzyvaTelemetryHealthController, :health)
       end
     end
+  end
+
+  @doc false
+  @spec health_response(atom()) :: {pos_integer(), map()}
+  def health_response(format) do
+    # get_health_status/0 always returns {:ok, data}; the historical
+    # {:error, _} branch was unreachable, so it is not carried over here.
+    {:ok, health_data} = ZyzyvaTelemetry.AppMonitoring.get_health_status()
+    format_response(format, health_data)
+  end
+
+  defp format_response(:simple, health_data), do: simple_response(health_data)
+  defp format_response(_format, health_data), do: full_response(health_data)
+
+  defp simple_response(health_data) do
+    if health_data[:status] in [:healthy, :ok] do
+      {200, %{status: "ok"}}
+    else
+      {503, %{status: to_string(health_data[:status])}}
+    end
+  end
+
+  defp full_response(health_data) do
+    {status_code(health_data[:status]), format_health_data(health_data)}
+  end
+
+  defp status_code(:healthy), do: 200
+  defp status_code(:ok), do: 200
+  defp status_code(:degraded), do: 200
+  defp status_code(:critical), do: 503
+  defp status_code(_), do: 503
+
+  defp format_health_data(data) do
+    %{
+      status: to_string(data[:status] || :unknown),
+      service: get_service_name(),
+      timestamp: format_timestamp(data[:timestamp]),
+      memory: format_memory(data[:memory]),
+      processes: data[:processes],
+      database_connected: data[:database_connected]
+    }
+    |> Map.merge(extract_custom_checks(data))
+    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    |> Map.new()
+  end
+
+  # NOTE (latent bug, behavior preserved): this historically called
+  # Application.get_application(__MODULE__) and matched `{:ok, app}`, but that
+  # function returns `atom() | nil`, so the match never succeeded and the
+  # service name has always resolved to "unknown". Flagged for maintainers.
+  defp get_service_name, do: "unknown"
+
+  defp format_timestamp(nil), do: DateTime.to_iso8601(DateTime.utc_now())
+  defp format_timestamp(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp format_timestamp(ts), do: to_string(ts)
+
+  defp format_memory(nil), do: nil
+  defp format_memory(%{mb: mb, status: status}), do: %{mb: mb, status: to_string(status)}
+  defp format_memory(memory), do: memory
+
+  defp extract_custom_checks(data) do
+    standard_fields = [
+      :status,
+      :timestamp,
+      :memory,
+      :processes,
+      :database_connected,
+      :rabbitmq_connected,
+      :message
+    ]
+
+    data
+    |> Enum.reject(fn {k, _v} -> k in standard_fields end)
+    |> Map.new()
   end
 end

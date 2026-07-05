@@ -58,8 +58,7 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTracker do
         conn
 
       true ->
-        conn
-        |> register_before_send(fn conn ->
+        register_before_send(conn, fn conn ->
           track_payload(conn, start_time, request_size, request_type, config)
         end)
     end
@@ -69,34 +68,36 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTracker do
   defp should_track?(_type, _config), do: true
 
   defp track_payload(conn, start_time, request_size, request_type, config) do
-    duration = System.monotonic_time() - start_time
-    response_size = get_response_size(conn)
+    metadata = build_metadata(conn, request_size, request_type)
 
-    metadata = %{
+    emit_payload_event(System.monotonic_time() - start_time, metadata)
+    check_large_payload(metadata, config)
+
+    conn
+  end
+
+  defp build_metadata(conn, request_size, request_type) do
+    %{
       request_size: request_size,
-      response_size: response_size,
+      response_size: get_response_size(conn),
       request_type: request_type,
       method: conn.method,
       path: conn.request_path,
       status: conn.status,
       route: get_route(conn)
     }
+  end
 
-    # Emit telemetry event
+  defp emit_payload_event(duration, metadata) do
     :telemetry.execute(
       [:zyzyva, :phoenix, :payload],
       %{
         duration: duration,
-        request_size: request_size,
-        response_size: response_size
+        request_size: metadata.request_size,
+        response_size: metadata.response_size
       },
       metadata
     )
-
-    # Check for large payloads
-    check_large_payload(request_size, response_size, metadata, config)
-
-    conn
   end
 
   ## Size Calculation
@@ -129,35 +130,35 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTracker do
     path = conn.request_path
 
     cond do
-      is_static_path?(path) -> :static
-      is_api_path?(path) -> :api
+      static_path?(path) -> :static
+      api_path?(path) -> :api
       true -> :dynamic
     end
   end
 
-  defp is_static_path?(path) do
+  defp static_path?(path) do
     String.match?(path, ~r/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map)$/i) ||
       String.starts_with?(path, "/assets/") ||
       String.starts_with?(path, "/images/") ||
       String.starts_with?(path, "/static/")
   end
 
-  defp is_api_path?(path) do
+  defp api_path?(path) do
     String.starts_with?(path, "/api/") ||
       String.starts_with?(path, "/graphql")
   end
 
   ## Large Payload Detection
 
-  defp check_large_payload(request_size, response_size, metadata, config) do
+  defp check_large_payload(metadata, config) do
     threshold_bytes = (config[:large_payload_threshold_kb] || 1000) * 1024
 
     cond do
-      request_size > threshold_bytes ->
-        log_large_payload(:request, request_size, metadata)
+      metadata.request_size > threshold_bytes ->
+        log_large_payload(:request, metadata.request_size, metadata)
 
-      response_size > threshold_bytes ->
-        log_large_payload(:response, response_size, metadata)
+      metadata.response_size > threshold_bytes ->
+        log_large_payload(:response, metadata.response_size, metadata)
 
       true ->
         :ok
@@ -188,7 +189,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTracker do
   end
 
   defp get_config do
-    Application.get_env(:zyzyva_telemetry, :payload_tracker, [])
+    :zyzyva_telemetry
+    |> Application.get_env(:payload_tracker, [])
     |> Keyword.put_new(:enabled, false)
     |> Keyword.put_new(:large_payload_threshold_kb, 1000)
     |> Keyword.put_new(:track_static_requests, false)

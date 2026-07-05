@@ -11,7 +11,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       Application.put_env(:zyzyva_telemetry, :payload_tracker, enabled: false)
 
       conn =
-        conn(:get, "/test")
+        :get
+        |> conn("/test")
         |> PayloadTracker.call([])
         |> send_resp(200, "OK")
 
@@ -34,7 +35,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       end)
 
       _conn =
-        conn(:post, "/api/users")
+        :post
+        |> conn("/api/users")
         |> put_req_header("content-length", "1234")
         |> PayloadTracker.call([])
         |> send_resp(200, "Response body")
@@ -66,7 +68,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       end)
 
       _conn =
-        conn(:get, "/assets/app.js")
+        :get
+        |> conn("/assets/app.js")
         |> PayloadTracker.call([])
         |> send_resp(200, "console.log('test')")
 
@@ -90,7 +93,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       end)
 
       _conn =
-        conn(:get, "/api/v1/users")
+        :get
+        |> conn("/api/v1/users")
         |> PayloadTracker.call([])
         |> send_resp(200, "[]")
 
@@ -114,7 +118,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       end)
 
       _conn =
-        conn(:get, "/users/123")
+        :get
+        |> conn("/users/123")
         |> PayloadTracker.call([])
         |> send_resp(200, "<html>User Page</html>")
 
@@ -141,7 +146,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       end)
 
       conn =
-        conn(:get, "/images/logo.png")
+        :get
+        |> conn("/images/logo.png")
         |> PayloadTracker.call([])
         |> send_resp(200, "PNG_DATA")
 
@@ -158,7 +164,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       log_output =
         capture_log(fn ->
           conn =
-            conn(:post, "/api/upload")
+            :post
+            |> conn("/api/upload")
             |> put_req_header("content-length", "2048")
             |> PayloadTracker.call([])
             |> send_resp(200, "OK")
@@ -183,7 +190,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       log_output =
         capture_log(fn ->
           conn =
-            conn(:get, "/api/data")
+            :get
+            |> conn("/api/data")
             |> PayloadTracker.call([])
             |> send_resp(200, large_body)
 
@@ -210,7 +218,8 @@ defmodule ZyzyvaTelemetry.Plugs.PayloadTrackerTest do
       end)
 
       _conn =
-        conn(:get, "/test")
+        :get
+        |> conn("/test")
         |> PayloadTracker.call([])
         |> send_resp(200, "Response")
 

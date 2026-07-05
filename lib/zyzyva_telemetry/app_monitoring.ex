@@ -8,6 +8,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
   Get the current health status for use in health endpoints.
   Returns the most recent health check data.
   """
+  @spec get_health_status() :: {:ok, map()}
   def get_health_status do
     health_data = ZyzyvaTelemetry.Health.Registry.check_health()
     {:ok, health_data}
@@ -16,6 +17,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
   @doc """
   Standard database health check using Ecto repo.
   """
+  @spec check_database(module() | nil) :: boolean() | nil
   def check_database(nil), do: nil
 
   def check_database(repo) do
@@ -31,6 +33,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
   Standard memory health check.
   Returns memory in MB and a status indicator.
   """
+  @spec check_memory() :: map()
   def check_memory do
     memory_mb = :erlang.memory(:total) / 1_024 / 1_024
 
@@ -53,6 +56,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
   @doc """
   Standard process count health check.
   """
+  @spec check_processes() :: map()
   def check_processes do
     count = length(Process.list())
 
@@ -73,6 +77,7 @@ defmodule ZyzyvaTelemetry.AppMonitoring do
   @doc """
   Check if a named GenServer/Broadway pipeline is running.
   """
+  @spec check_process(atom()) :: boolean()
   def check_process(process_name) do
     case Process.whereis(process_name) do
       nil -> false

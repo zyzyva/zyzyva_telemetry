@@ -6,8 +6,7 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
 
   # Helper function to extract metrics from Event structs
   defp extract_metrics(events) do
-    events
-    |> Enum.flat_map(fn
+    Enum.flat_map(events, fn
       %{metrics: metrics} -> metrics
       metric -> [metric]
     end)
@@ -100,7 +99,9 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
       end)
 
       on_exit(fn ->
-        :telemetry.list_handlers([])
+        handlers = :telemetry.list_handlers([])
+
+        handlers
         |> Enum.filter(fn handler ->
           case handler.id do
             id when is_binary(id) -> String.starts_with?(id, "test-finch-request")
@@ -172,7 +173,9 @@ defmodule ZyzyvaTelemetry.Plugins.FinchTest do
       end)
 
       on_exit(fn ->
-        :telemetry.list_handlers([])
+        handlers = :telemetry.list_handlers([])
+
+        handlers
         |> Enum.filter(fn handler ->
           case handler.id do
             id when is_binary(id) -> String.starts_with?(id, "test-finch-error")

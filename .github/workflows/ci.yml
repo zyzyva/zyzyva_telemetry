@@ -1,0 +1,90 @@
+# CI mirrors `mix check` / `mix check.all`. This is a library: its tests need no
+# database or broker (test_helper.exs is just ExUnit.start()), so there are no
+# service containers. Toolchain pinned to the repo's real versions (Elixir
+# 1.19.5 / OTP 28); this repo has no .tool-versions, so these are the versions
+# its tests pass on locally.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Cancel superseded runs on the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19.5"
+          otp-version: "28"
+
+      # Cache deps and _build keyed on the lockfile so CI is fast.
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      # Gate 1: formatting is deterministic — fail, don't reformat.
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      # Gate 2: enforceable style rules via Credo (strict).
+      - name: Credo
+        run: mix credo --strict
+
+      # Gate 3: compile with warnings as errors.
+      - name: Compile (warnings as errors)
+        run: mix compile --warnings-as-errors
+
+      # Gate 4: tests, including doctests.
+      - name: Tests
+        run: mix test
+
+  # Dialyzer split into its own job because the PLT build is slow;
+  # cache the PLT so it only rebuilds when deps change.
+  dialyzer:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19.5"
+          otp-version: "28"
+
+      - name: Cache deps and PLT
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+            priv/plts
+          key: ${{ runner.os }}-dialyzer-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-dialyzer-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Dialyzer
+        run: mix dialyzer --format github

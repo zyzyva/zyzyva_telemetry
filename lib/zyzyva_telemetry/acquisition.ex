@@ -111,11 +111,18 @@ defmodule ZyzyvaTelemetry.Acquisition do
   end
 
   def build(referer, params, landing_path, enrichment, now) when is_map(enrichment) do
-    utms = extract_utms(params)
-    source = classify(referer, utms)
+    base = base_acquisition(referer, params, landing_path, now)
 
-    base = %{
-      source: source,
+    Enum.reduce(@enrichment_keys, base, fn key, acc ->
+      Map.put(acc, key, Map.get(enrichment, key))
+    end)
+  end
+
+  defp base_acquisition(referer, params, landing_path, now) do
+    utms = extract_utms(params)
+
+    %{
+      source: classify(referer, utms),
       referer: normalize_referer(referer),
       landing_path: landing_path,
       utm_source: utms["utm_source"],
@@ -125,10 +132,6 @@ defmodule ZyzyvaTelemetry.Acquisition do
       utm_term: utms["utm_term"],
       first_touch_at: now
     }
-
-    Enum.reduce(@enrichment_keys, base, fn key, acc ->
-      Map.put(acc, key, Map.get(enrichment, key))
-    end)
   end
 
   @doc """
@@ -169,87 +172,49 @@ defmodule ZyzyvaTelemetry.Acquisition do
 
   # --- Private: host-based classification ---
 
+  # Ordered host->source patterns, first substring match wins. Mirrors the
+  # historical cond top-to-bottom (mail clients before the generic google.
+  # match, GBP/Maps before search, etc.). The two exact-host special cases
+  # (t.co, youtu.be) are handled by the function heads below because they are
+  # not substrings of their platform's contains-pattern; the other former
+  # exact matches (l.facebook.com, lm.facebook.com, out.reddit.com) are already
+  # covered by their contains-patterns.
+  @host_patterns [
+    {"mail.google.", :email},
+    {"mail.yahoo.", :email},
+    {"outlook.", :email},
+    {"proton.me", :email},
+    {"fastmail.", :email},
+    {"maps.google.", :gbp},
+    {"business.google.", :gbp},
+    {"google.", :search_google},
+    {"bing.", :search_bing},
+    {"duckduckgo.", :search_ddg},
+    {"yahoo.", :search_other},
+    {"ecosia.", :search_other},
+    {"kagi.", :search_other},
+    {"brave.", :search_other},
+    {"linkedin.", :social_linkedin},
+    {"twitter.", :social_x},
+    {"x.com", :social_x},
+    {"facebook.", :social_facebook},
+    {"reddit.", :social_reddit},
+    {"youtube.", :social_youtube},
+    {"instagram.", :social_instagram},
+    {"threads.net", :social_other},
+    {"tiktok.", :social_other},
+    {"bsky.", :social_other},
+    {"bluesky.", :social_other},
+    {"mastodon.", :social_other}
+  ]
+
+  defp classify_host("t.co"), do: :social_x
+  defp classify_host("youtu.be"), do: :social_youtube
+
   defp classify_host(host) do
-    cond do
-      # Mail clients FIRST — mail.google.com must beat the generic google. match
-      String.contains?(host, "mail.google.") ->
-        :email
-
-      String.contains?(host, "mail.yahoo.") ->
-        :email
-
-      String.contains?(host, "outlook.") ->
-        :email
-
-      String.contains?(host, "proton.me") ->
-        :email
-
-      String.contains?(host, "fastmail.") ->
-        :email
-
-      # Google Business Profile / Maps — must beat the generic google. match
-      String.contains?(host, "maps.google.") ->
-        :gbp
-
-      String.contains?(host, "business.google.") ->
-        :gbp
-
-      # Search engines
-      String.contains?(host, "google.") ->
-        :search_google
-
-      String.contains?(host, "bing.") ->
-        :search_bing
-
-      String.contains?(host, "duckduckgo.") ->
-        :search_ddg
-
-      String.contains?(host, "yahoo.") ->
-        :search_other
-
-      String.contains?(host, "ecosia.") ->
-        :search_other
-
-      String.contains?(host, "kagi.") ->
-        :search_other
-
-      String.contains?(host, "brave.") ->
-        :search_other
-
-      # Social
-      String.contains?(host, "linkedin.") ->
-        :social_linkedin
-
-      host == "t.co" or String.contains?(host, "twitter.") or String.contains?(host, "x.com") ->
-        :social_x
-
-      String.contains?(host, "facebook.") or host == "l.facebook.com" or host == "lm.facebook.com" ->
-        :social_facebook
-
-      String.contains?(host, "reddit.") or host == "out.reddit.com" ->
-        :social_reddit
-
-      String.contains?(host, "youtube.") or host == "youtu.be" ->
-        :social_youtube
-
-      String.contains?(host, "instagram.") ->
-        :social_instagram
-
-      String.contains?(host, "threads.net") ->
-        :social_other
-
-      String.contains?(host, "tiktok.") ->
-        :social_other
-
-      String.contains?(host, "bsky.") or String.contains?(host, "bluesky.") ->
-        :social_other
-
-      String.contains?(host, "mastodon.") ->
-        :social_other
-
-      true ->
-        :referral_other
-    end
+    Enum.find_value(@host_patterns, :referral_other, fn {needle, source} ->
+      if String.contains?(host, needle), do: source
+    end)
   end
 
   # --- Private: UTM-based classification ---

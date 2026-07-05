@@ -141,35 +141,36 @@ defmodule ZyzyvaTelemetry.Events do
   # ----------------------------------------------------------------------------
 
   defp emit(event_name, event_type, bounded_fields, caller_metadata) do
-    service = service_name()
-    source = current_source()
-    utms = current_utms()
-
-    # Bounded fields — safe for Prom tags.
-    prom_metadata =
-      bounded_fields
-      |> Map.put(:service, service)
-      |> Map.put(:source, source)
-
-    # Full fields — everything goes to Loki. Caller metadata is merged last so
-    # explicit slug/utm overrides from the caller take precedence over
-    # auto-injected values.
-    full_fields =
-      prom_metadata
-      |> Map.merge(%{
-        event_type: event_type,
-        correlation_id: Correlation.current(),
-        timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-      })
-      |> Map.merge(utms)
-      |> Map.merge(caller_metadata)
-      |> drop_nils()
+    prom_metadata = build_prom_metadata(bounded_fields)
+    full_fields = build_full_fields(prom_metadata, event_type, caller_metadata)
 
     :telemetry.execute(event_name, %{count: 1}, prom_metadata)
 
     Logger.info(log_message(event_type, full_fields), event_fields: full_fields)
 
     :ok
+  end
+
+  # Bounded fields — safe for Prom tags.
+  defp build_prom_metadata(bounded_fields) do
+    bounded_fields
+    |> Map.put(:service, service_name())
+    |> Map.put(:source, current_source())
+  end
+
+  # Full fields — everything goes to Loki. Caller metadata is merged last so
+  # explicit slug/utm overrides from the caller take precedence over
+  # auto-injected values.
+  defp build_full_fields(prom_metadata, event_type, caller_metadata) do
+    prom_metadata
+    |> Map.merge(%{
+      event_type: event_type,
+      correlation_id: Correlation.current(),
+      timestamp: DateTime.to_iso8601(DateTime.utc_now())
+    })
+    |> Map.merge(current_utms())
+    |> Map.merge(caller_metadata)
+    |> drop_nils()
   end
 
   defp service_name do

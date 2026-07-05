@@ -4,8 +4,7 @@ defmodule ZyzyvaTelemetry.Plugins.FunnelMetricsTest do
   alias ZyzyvaTelemetry.Plugins.FunnelMetrics
 
   defp all_metrics do
-    FunnelMetrics.event_metrics([])
-    |> Enum.flat_map(fn
+    Enum.flat_map(FunnelMetrics.event_metrics([]), fn
       %{metrics: metrics} -> metrics
       metric -> [metric]
     end)

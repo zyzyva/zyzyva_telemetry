@@ -9,21 +9,13 @@ defmodule ZyzyvaTelemetry.Correlation do
   @doc """
   Generates a new correlation ID in UUID v4 format.
   """
+  @spec new() :: String.t()
   def new do
-    # Generate UUID v4
-    <<a1::4, a2::4, a3::4, a4::4, a5::4, a6::4, a7::4, a8::4, b1::4, b2::4, b3::4, b4::4,
-      _version::4, c1::4, c2::4, c3::4, _variant::2, d1::6, d2::4, d3::4, e1::4, e2::4, e3::4,
-      e4::4, e5::4, e6::4, e7::4, e8::4, e9::4, e10::4, e11::4,
-      e12::4>> = :crypto.strong_rand_bytes(16)
+    # UUID v4: 16 random bytes with the version nibble (4) and the RFC 4122
+    # variant bits (0b10) set in their canonical positions.
+    <<u0::48, _::4, u1::12, _::2, u2::62>> = :crypto.strong_rand_bytes(16)
 
-    # Set version to 4 and variant bits
-    version = 4
-    # RFC 4122 variant
-    variant = 2
-
-    <<a1::4, a2::4, a3::4, a4::4, a5::4, a6::4, a7::4, a8::4, b1::4, b2::4, b3::4, b4::4,
-      version::4, c1::4, c2::4, c3::4, variant::2, d1::6, d2::4, d3::4, e1::4, e2::4, e3::4,
-      e4::4, e5::4, e6::4, e7::4, e8::4, e9::4, e10::4, e11::4, e12::4>>
+    <<u0::48, 4::4, u1::12, 2::2, u2::62>>
     |> Base.encode16(case: :lower)
     |> format_uuid()
   end
@@ -32,6 +24,7 @@ defmodule ZyzyvaTelemetry.Correlation do
   Executes a function with a specific correlation ID set.
   The correlation ID is automatically restored to its previous value after execution.
   """
+  @spec with_correlation(term(), (-> any())) :: any()
   def with_correlation(correlation_id, fun) do
     previous = get()
     set(correlation_id)
@@ -51,6 +44,7 @@ defmodule ZyzyvaTelemetry.Correlation do
   Gets the current correlation ID from the process dictionary.
   Returns nil if no correlation ID is set.
   """
+  @spec get() :: term()
   def get do
     Process.get(@correlation_key)
   end
@@ -58,6 +52,7 @@ defmodule ZyzyvaTelemetry.Correlation do
   @doc """
   Alias for get/0 - returns the current correlation ID.
   """
+  @spec current() :: term()
   def current do
     get()
   end
@@ -65,6 +60,7 @@ defmodule ZyzyvaTelemetry.Correlation do
   @doc """
   Sets the correlation ID in the process dictionary.
   """
+  @spec set(term()) :: :ok
   def set(correlation_id) do
     Process.put(@correlation_key, correlation_id)
     :ok
@@ -73,6 +69,7 @@ defmodule ZyzyvaTelemetry.Correlation do
   @doc """
   Clears the correlation ID from the process dictionary.
   """
+  @spec clear() :: :ok
   def clear do
     Process.delete(@correlation_key)
     :ok
@@ -82,6 +79,7 @@ defmodule ZyzyvaTelemetry.Correlation do
   Gets the current correlation ID or generates a new one if not set.
   The generated ID is automatically set in the process dictionary.
   """
+  @spec get_or_generate() :: term()
   def get_or_generate do
     case get() do
       nil ->
@@ -98,6 +96,7 @@ defmodule ZyzyvaTelemetry.Correlation do
   Adds the current correlation ID to a map or keyword list if one is set.
   If no correlation ID is set, returns the data unchanged.
   """
+  @spec propagate(map() | keyword()) :: map() | keyword()
   def propagate(data) when is_map(data) do
     case get() do
       nil -> data
@@ -114,33 +113,14 @@ defmodule ZyzyvaTelemetry.Correlation do
 
   # Private functions
 
+  # Insert the canonical 8-4-4-4-12 hyphens into a 32-char hex string.
   defp format_uuid(<<
-         a1,
-         a2,
-         a3,
-         a4,
-         a5,
-         a6,
-         a7,
-         a8,
-         b1,
-         b2,
-         b3,
-         b4,
-         c1,
-         c2,
-         c3,
-         c4,
-         d1,
-         d2,
-         d3,
-         d4,
-         rest::binary
+         group_a::binary-size(8),
+         group_b::binary-size(4),
+         group_c::binary-size(4),
+         group_d::binary-size(4),
+         group_e::binary-size(12)
        >>) do
-    "#{<<a1, a2, a3, a4, a5, a6, a7, a8>>}-" <>
-      "#{<<b1, b2, b3, b4>>}-" <>
-      "#{<<c1, c2, c3, c4>>}-" <>
-      "#{<<d1, d2, d3, d4>>}-" <>
-      "#{rest}"
+    "#{group_a}-#{group_b}-#{group_c}-#{group_d}-#{group_e}"
   end
 end

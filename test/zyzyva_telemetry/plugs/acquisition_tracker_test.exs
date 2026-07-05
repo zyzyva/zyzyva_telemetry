@@ -21,7 +21,8 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
   defp build_conn_with_session(method, path, referer \\ nil) do
     conn =
-      conn(method, path)
+      method
+      |> conn(path)
       |> Map.put(:secret_key_base, String.duplicate("a", 64))
       |> Plug.Session.call(@session_opts)
       |> fetch_session()
@@ -34,8 +35,10 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
   test "captures first-touch acquisition on initial request" do
     conn =
-      build_conn_with_session(:get, "/services/openclaw-setup?utm_source=linkedin", nil)
-      |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+      AcquisitionTracker.call(
+        build_conn_with_session(:get, "/services/openclaw-setup?utm_source=linkedin", nil),
+        AcquisitionTracker.init([])
+      )
 
     acquisition = get_session(conn, "acquisition")
     assert acquisition.source == :social_linkedin
@@ -46,12 +49,14 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
   test "does not overwrite existing session acquisition on subsequent request" do
     first =
-      build_conn_with_session(
-        :get,
-        "/services/openclaw-setup?utm_source=gbp",
-        nil
+      AcquisitionTracker.call(
+        build_conn_with_session(
+          :get,
+          "/services/openclaw-setup?utm_source=gbp",
+          nil
+        ),
+        AcquisitionTracker.init([])
       )
-      |> AcquisitionTracker.call(AcquisitionTracker.init([]))
 
     first_acquisition = get_session(first, "acquisition")
     assert first_acquisition.source == :gbp
@@ -59,7 +64,8 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
     # Second request simulates the same session (existing first-touch stored)
     # returning from a LinkedIn click — first-touch should win.
     second =
-      build_conn_with_session(:get, "/about", "https://www.linkedin.com/")
+      :get
+      |> build_conn_with_session("/about", "https://www.linkedin.com/")
       |> put_session("acquisition", first_acquisition)
       |> AcquisitionTracker.call(AcquisitionTracker.init([]))
 
@@ -70,8 +76,10 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
   test "classifies a direct hit with no referer and no utms as :direct" do
     conn =
-      build_conn_with_session(:get, "/")
-      |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+      AcquisitionTracker.call(
+        build_conn_with_session(:get, "/"),
+        AcquisitionTracker.init([])
+      )
 
     acquisition = get_session(conn, "acquisition")
     assert acquisition.source == :direct
@@ -80,8 +88,10 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
   test "captures referer when no UTMs present" do
     conn =
-      build_conn_with_session(:get, "/blog", "https://www.google.com/search?q=openclaw")
-      |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+      AcquisitionTracker.call(
+        build_conn_with_session(:get, "/blog", "https://www.google.com/search?q=openclaw"),
+        AcquisitionTracker.init([])
+      )
 
     acquisition = get_session(conn, "acquisition")
     assert acquisition.source == :search_google
@@ -92,14 +102,17 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
     opts = AcquisitionTracker.init(refresh_on_utm: true)
 
     first =
-      build_conn_with_session(:get, "/?utm_source=gbp")
-      |> AcquisitionTracker.call(opts)
+      AcquisitionTracker.call(
+        build_conn_with_session(:get, "/?utm_source=gbp"),
+        opts
+      )
 
     first_acquisition = get_session(first, "acquisition")
     assert first_acquisition.source == :gbp
 
     second =
-      build_conn_with_session(:get, "/blog?utm_source=linkedin&utm_campaign=launch")
+      :get
+      |> build_conn_with_session("/blog?utm_source=linkedin&utm_campaign=launch")
       |> put_session("acquisition", first_acquisition)
       |> AcquisitionTracker.call(opts)
 
@@ -110,8 +123,10 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
   test "sets acquisition on the process dictionary for downstream consumers" do
     assert Acquisition.get() == nil
 
-    build_conn_with_session(:get, "/?utm_source=gbp")
-    |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+    AcquisitionTracker.call(
+      build_conn_with_session(:get, "/?utm_source=gbp"),
+      AcquisitionTracker.init([])
+    )
 
     assert Acquisition.get().source == :gbp
   end
@@ -120,8 +135,10 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
     opts = AcquisitionTracker.init(session_key: "source_attribution")
 
     conn =
-      build_conn_with_session(:get, "/?utm_source=linkedin")
-      |> AcquisitionTracker.call(opts)
+      AcquisitionTracker.call(
+        build_conn_with_session(:get, "/?utm_source=linkedin"),
+        opts
+      )
 
     assert get_session(conn, "source_attribution").source == :social_linkedin
     assert get_session(conn, "acquisition") == nil
@@ -130,7 +147,8 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
   describe "geo + device enrichment" do
     test "extracts Cloudflare geo headers into acquisition" do
       conn =
-        build_conn_with_session(:get, "/")
+        :get
+        |> build_conn_with_session("/")
         |> put_req_header("cf-connecting-ip", "203.0.113.42")
         |> put_req_header("cf-ipcountry", "US")
         |> put_req_header("cf-region-code", "TN")
@@ -153,7 +171,8 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
     test "drops CF sentinel country codes XX and T1" do
       conn =
-        build_conn_with_session(:get, "/")
+        :get
+        |> build_conn_with_session("/")
         |> put_req_header("cf-ipcountry", "XX")
         |> AcquisitionTracker.call(AcquisitionTracker.init([]))
 
@@ -173,7 +192,8 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
       for {ua, expected} <- ua_types do
         conn =
-          build_conn_with_session(:get, "/")
+          :get
+          |> build_conn_with_session("/")
           |> put_req_header("user-agent", ua)
           |> AcquisitionTracker.call(AcquisitionTracker.init([]))
 
@@ -186,7 +206,8 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
     test "falls back to x-forwarded-for when cf-connecting-ip absent" do
       conn =
-        build_conn_with_session(:get, "/")
+        :get
+        |> build_conn_with_session("/")
         |> put_req_header("x-forwarded-for", "198.51.100.7, 10.0.0.1")
         |> AcquisitionTracker.call(AcquisitionTracker.init([]))
 
@@ -195,8 +216,10 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
 
     test "enrichment fields are nil when headers absent" do
       conn =
-        build_conn_with_session(:get, "/")
-        |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+        AcquisitionTracker.call(
+          build_conn_with_session(:get, "/"),
+          AcquisitionTracker.init([])
+        )
 
       acq = get_session(conn, "acquisition")
       assert acq.country == nil
@@ -207,8 +230,10 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
     test "refreshes enrichment on existing session while preserving first-touch" do
       # First request: establish first-touch from linkedin, no CF headers
       first =
-        build_conn_with_session(:get, "/landing?utm_source=linkedin", "https://linkedin.com/")
-        |> AcquisitionTracker.call(AcquisitionTracker.init([]))
+        AcquisitionTracker.call(
+          build_conn_with_session(:get, "/landing?utm_source=linkedin", "https://linkedin.com/"),
+          AcquisitionTracker.init([])
+        )
 
       first_acq = get_session(first, "acquisition")
       assert first_acq.source == :social_linkedin
@@ -217,7 +242,8 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTrackerTest do
       # Second request from the same session: CF now sending geo headers.
       # Session cookie carries first-touch forward; geo should be patched in.
       second =
-        conn(:get, "/about")
+        :get
+        |> conn("/about")
         |> Map.put(:secret_key_base, String.duplicate("a", 64))
         |> Plug.Session.call(@session_opts)
         |> fetch_session()

@@ -107,8 +107,10 @@ defmodule ZyzyvaTelemetry.Feedback do
 
   defp ref_line(metadata) do
     parts =
-      [ref_part("#", metadata[:feedback_id]), ref_part("user ", metadata[:user_id])]
-      |> Enum.reject(&is_nil/1)
+      Enum.reject(
+        [ref_part("#", metadata[:feedback_id]), ref_part("user ", metadata[:user_id])],
+        &is_nil/1
+      )
 
     join_ref(parts)
   end

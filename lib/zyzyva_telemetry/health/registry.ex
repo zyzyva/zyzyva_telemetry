@@ -12,10 +12,12 @@ defmodule ZyzyvaTelemetry.Health.Registry do
 
   # Client API
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @spec check_health(term()) :: map()
   def check_health(_service_name \\ nil) do
     GenServer.call(__MODULE__, :get_health)
   catch
@@ -27,6 +29,7 @@ defmodule ZyzyvaTelemetry.Health.Registry do
       }
   end
 
+  @spec register_check(atom(), (-> any())) :: :ok
   def register_check(name, check_fun) do
     GenServer.cast(__MODULE__, {:register_check, name, check_fun})
   end
@@ -95,14 +98,16 @@ defmodule ZyzyvaTelemetry.Health.Registry do
     # Determine overall status
     overall_status = determine_overall_status(memory, processes, custom_results)
 
-    %{
-      status: overall_status,
-      service: state.service_name,
-      timestamp: DateTime.utc_now(),
-      memory: memory,
-      processes: processes[:count]
-    }
-    |> Map.merge(custom_results)
+    Map.merge(
+      %{
+        status: overall_status,
+        service: state.service_name,
+        timestamp: DateTime.utc_now(),
+        memory: memory,
+        processes: processes[:count]
+      },
+      custom_results
+    )
   end
 
   defp safe_run_check(check_fun) do

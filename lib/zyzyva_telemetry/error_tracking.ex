@@ -32,6 +32,7 @@ defmodule ZyzyvaTelemetry.ErrorTracking do
   use GenServer
   require Logger
 
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
     %{
       id: __MODULE__,
@@ -39,6 +40,7 @@ defmodule ZyzyvaTelemetry.ErrorTracking do
     }
   end
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -46,44 +48,50 @@ defmodule ZyzyvaTelemetry.ErrorTracking do
   @impl true
   def init(opts) do
     service_name = Keyword.fetch!(opts, :service_name)
-    use_file_logging = Keyword.get(opts, :use_file_logging, false)
-    loki_url = Keyword.get(opts, :loki_url)
-
-    # Determine which reporter to use
-    {reporter_module, reporter_opts} =
-      cond do
-        # If file logging explicitly requested, use file reporter
-        use_file_logging ->
-          {ZyzyvaTelemetry.Reporters.StructuredFile,
-           service_name: service_name, log_path: "/var/log/#{service_name}/errors.json"}
-
-        # If Loki URL provided, use HTTP push (recommended)
-        loki_url ->
-          {ZyzyvaTelemetry.Reporters.Loki, service_name: service_name, loki_url: loki_url}
-
-        # Default: try to get Loki URL from environment, fallback to file
-        true ->
-          case System.get_env("LOKI_URL") do
-            nil ->
-              {ZyzyvaTelemetry.Reporters.StructuredFile,
-               service_name: service_name, log_path: "/var/log/#{service_name}/errors.json"}
-
-            env_loki_url ->
-              {ZyzyvaTelemetry.Reporters.Loki, service_name: service_name, loki_url: env_loki_url}
-          end
-      end
+    {reporter_module, reporter_opts} = select_reporter(opts, service_name)
 
     # Store reporter options in process dictionary for the reporter to access
     Process.put(:tower_reporter_opts, reporter_opts)
 
-    # Configure Tower with the reporter module
-    # Tower v0.8 expects a list of reporter modules, not keyword lists
-    reporters = [reporter_module]
+    # Configure Tower via application environment.
+    # Tower v0.8 expects a list of reporter modules, not keyword lists.
+    Application.put_env(:tower, :reporters, [reporter_module])
 
-    # Configure Tower via application environment
-    Application.put_env(:tower, :reporters, reporters)
+    attach_tower(service_name, reporter_module, reporter_opts)
+  end
 
-    # Attach Tower to the logger
+  # Pick a reporter: explicit file logging, then explicit Loki URL, then the
+  # LOKI_URL env var, falling back to file logging.
+  defp select_reporter(opts, service_name) do
+    cond do
+      Keyword.get(opts, :use_file_logging, false) ->
+        file_reporter(service_name)
+
+      Keyword.get(opts, :loki_url) ->
+        loki_reporter(service_name, Keyword.get(opts, :loki_url))
+
+      true ->
+        default_reporter(service_name)
+    end
+  end
+
+  defp default_reporter(service_name) do
+    case System.get_env("LOKI_URL") do
+      nil -> file_reporter(service_name)
+      env_loki_url -> loki_reporter(service_name, env_loki_url)
+    end
+  end
+
+  defp file_reporter(service_name) do
+    {ZyzyvaTelemetry.Reporters.StructuredFile,
+     service_name: service_name, log_path: "/var/log/#{service_name}/errors.json"}
+  end
+
+  defp loki_reporter(service_name, loki_url) do
+    {ZyzyvaTelemetry.Reporters.Loki, service_name: service_name, loki_url: loki_url}
+  end
+
+  defp attach_tower(service_name, reporter_module, reporter_opts) do
     case Tower.attach() do
       :ok ->
         Logger.info(

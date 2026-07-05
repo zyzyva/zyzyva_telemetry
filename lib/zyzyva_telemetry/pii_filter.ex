@@ -64,6 +64,7 @@ defmodule ZyzyvaTelemetry.PIIFilter do
   @doc """
   Filters PII from telemetry metadata (map or keyword list).
   """
+  @spec filter(term()) :: term()
   def filter(data) when is_map(data) do
     config = get_config()
     filter_map(data, config)
@@ -87,6 +88,7 @@ defmodule ZyzyvaTelemetry.PIIFilter do
       iex> PIIFilter.mask_email("a@b.co")
       "a***@b.co"
   """
+  @spec mask_email(term()) :: term()
   def mask_email(email) when is_binary(email) do
     case String.split(email, "@", parts: 2) do
       [local, domain] ->
@@ -109,6 +111,7 @@ defmodule ZyzyvaTelemetry.PIIFilter do
       iex> PIIFilter.mask_phone("555-123-4567")
       "***-***-4567"
   """
+  @spec mask_phone(term()) :: term()
   def mask_phone(phone) when is_binary(phone) do
     case String.length(phone) do
       len when len >= 10 ->
@@ -125,6 +128,7 @@ defmodule ZyzyvaTelemetry.PIIFilter do
   @doc """
   Detects if a string is a credit card number using the Luhn algorithm.
   """
+  @spec credit_card?(term()) :: boolean()
   def credit_card?(value) when is_binary(value) do
     # Remove all non-digit characters
     digits = String.replace(value, ~r/\D/, "")
@@ -144,6 +148,7 @@ defmodule ZyzyvaTelemetry.PIIFilter do
   @doc """
   Masks a credit card number, showing only last 4 digits.
   """
+  @spec mask_credit_card(term()) :: term()
   def mask_credit_card(value) when is_binary(value) do
     digits = String.replace(value, ~r/\D/, "")
     last_four = String.slice(digits, -4, 4)
@@ -155,7 +160,9 @@ defmodule ZyzyvaTelemetry.PIIFilter do
   ## Private Functions
 
   defp get_config do
-    Application.get_env(:zyzyva_telemetry, :pii_filter, [])
+    config = Application.get_env(:zyzyva_telemetry, :pii_filter, [])
+
+    config
     |> Keyword.put_new(:enabled, true)
     |> Keyword.put_new(:mask_email, true)
     |> Keyword.put_new(:mask_phone, true)
@@ -231,16 +238,17 @@ defmodule ZyzyvaTelemetry.PIIFilter do
 
   defp is_sensitive_key?(key, config) when is_atom(key) do
     sensitive_keys = Map.get(config, :sensitive_keys, @default_sensitive_keys)
-    key_string = Atom.to_string(key) |> String.downcase()
+    key_string = String.downcase(Atom.to_string(key))
 
     Enum.any?(sensitive_keys, fn sensitive_key ->
-      sensitive_string = Atom.to_string(sensitive_key) |> String.downcase()
+      sensitive_string = String.downcase(Atom.to_string(sensitive_key))
       String.contains?(key_string, sensitive_string)
     end)
   end
 
   ## String Value Filtering
 
+  # Only ever called with a binary (filter_by_type guards on is_binary/1).
   defp filter_string_value(value, config) when is_binary(value) do
     value
     |> maybe_filter_email(config)
@@ -248,8 +256,6 @@ defmodule ZyzyvaTelemetry.PIIFilter do
     |> maybe_filter_credit_card(config)
     |> maybe_filter_ssn(config)
   end
-
-  defp filter_string_value(value, _config), do: value
 
   ## Email Filtering
 

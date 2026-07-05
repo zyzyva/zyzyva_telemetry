@@ -43,7 +43,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEcto do
   ## Configuration
 
   defp get_config do
-    Application.get_env(:zyzyva_telemetry, :enhanced_ecto, [])
+    :zyzyva_telemetry
+    |> Application.get_env(:enhanced_ecto, [])
     |> Keyword.put_new(:enabled, false)
     |> Keyword.put_new(:slow_query_threshold_ms, 100)
     |> Keyword.put_new(:log_slow_queries, true)
@@ -55,12 +56,14 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEcto do
   ## Metrics Building
 
   defp build_metrics(config, opts) do
-    [
-      slow_query_event(opts),
-      query_type_event(config, opts),
-      transaction_event(config, opts)
-    ]
-    |> Enum.reject(&is_nil/1)
+    Enum.reject(
+      [
+        slow_query_event(opts),
+        query_type_event(config, opts),
+        transaction_event(config, opts)
+      ],
+      &is_nil/1
+    )
   end
 
   defp slow_query_event(_opts) do
@@ -94,6 +97,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEcto do
   ## These handler functions are public so they can be used by applications
   ## that want to attach to Ecto telemetry events manually.
 
+  @spec handle_query_event(list(), map(), map(), term()) :: :ok
   def handle_query_event(_event_name, measurements, metadata, config) do
     duration_ms = native_to_milliseconds(measurements[:total_time] || measurements[:query_time])
 
@@ -101,6 +105,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEcto do
     handle_slow_query_detection(config, metadata, duration_ms)
   end
 
+  @spec handle_transaction_event(list(), map(), map(), term()) :: :ok
   def handle_transaction_event(event_name, measurements, metadata, _config) do
     event_type = List.last(event_name)
 
@@ -143,13 +148,12 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEcto do
 
   ## Slow Query Detection
 
-  defp handle_slow_query_detection(config, metadata, duration_ms)
-       when is_number(duration_ms) do
+  # duration_ms comes from native_to_milliseconds/1, which always returns an
+  # integer, so no non-number fallback clause is needed.
+  defp handle_slow_query_detection(config, metadata, duration_ms) do
     threshold = Map.get(config, :slow_query_threshold_ms, 100)
     detect_slow_query(duration_ms >= threshold, config, metadata, duration_ms)
   end
-
-  defp handle_slow_query_detection(_config, _metadata, _duration_ms), do: :ok
 
   defp detect_slow_query(true, config, metadata, duration_ms) do
     emit_slow_query_event(metadata, duration_ms, config)
@@ -195,7 +199,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEcto do
         tags: [:source],
         unit: :millisecond,
         reporter_options: [
-          buckets: [100, 250, 500, 1000, 2500, 5000, 10000]
+          buckets: [100, 250, 500, 1000, 2500, 5000, 10_000]
         ]
       )
     ]

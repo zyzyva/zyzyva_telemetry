@@ -136,7 +136,8 @@ defmodule ZyzyvaTelemetry.Plugins.AiTokenUsage do
   ## Configuration
 
   defp get_config do
-    Application.get_env(:zyzyva_telemetry, :ai_token_usage, [])
+    :zyzyva_telemetry
+    |> Application.get_env(:ai_token_usage, [])
     |> Keyword.put_new(:enabled, true)
     |> Keyword.put_new(:track_by_model, true)
     |> Keyword.put_new(:track_cached_tokens, true)

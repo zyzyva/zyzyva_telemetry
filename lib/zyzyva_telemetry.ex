@@ -51,17 +51,18 @@ defmodule ZyzyvaTelemetry do
   Gets the current health status.
   Returns the most recent health check data from the registry.
   """
+  @spec get_health() :: map()
   def get_health do
-    case AppMonitoring.get_health_status() do
-      {:ok, data} -> data
-      _ -> %{status: "unknown", message: "Health check unavailable"}
-    end
+    # get_health_status/0 always returns {:ok, data}.
+    {:ok, data} = AppMonitoring.get_health_status()
+    data
   end
 
   @doc """
   Manually reports health status.
   Registers a custom health check with the registry.
   """
+  @spec report_health(atom(), (-> any())) :: :ok
   def report_health(name, check_fun) when is_atom(name) and is_function(check_fun, 0) do
     ZyzyvaTelemetry.Health.Registry.register_check(name, check_fun)
   end
@@ -90,6 +91,7 @@ defmodule ZyzyvaTelemetry do
   @doc """
   Emits a deployment event for metrics tracking.
   """
+  @spec track_deployment(String.t(), atom()) :: :ok
   def track_deployment(service_name, result \\ :success) do
     :telemetry.execute(
       [:ecosystem, :deployment, :completed],
@@ -102,6 +104,7 @@ defmodule ZyzyvaTelemetry do
   Tracks a business operation duration.
   Use with :telemetry.span/3 for automatic timing.
   """
+  @spec track_operation(String.t(), String.t(), map()) :: term()
   def track_operation(service_name, operation, metadata \\ %{}) do
     start_metadata = Map.merge(metadata, %{service_name: service_name, operation: operation})
 
@@ -118,6 +121,7 @@ defmodule ZyzyvaTelemetry do
   @doc """
   Emits an error event for metrics tracking.
   """
+  @spec track_error(String.t(), term()) :: :ok
   def track_error(service_name, kind) do
     :telemetry.execute(
       [:ecosystem, :error, :logged],

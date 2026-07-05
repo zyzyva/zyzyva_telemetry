@@ -1,6 +1,9 @@
 # The directory Mix will write compiled artifacts to.
 /_build/
 
+# Dialyzer PLT cache (built by mix check.all).
+/priv/plts/
+
 # If you run "mix test --cover", coverage assets end up here.
 /cover/
 

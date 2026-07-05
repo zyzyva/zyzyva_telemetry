@@ -6,8 +6,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEctoTest do
 
   # Helper function to extract metrics from Event structs
   defp extract_metrics(events) do
-    events
-    |> Enum.flat_map(fn
+    Enum.flat_map(events, fn
       %{metrics: metrics} -> metrics
       metric -> [metric]
     end)
@@ -65,7 +64,9 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEctoTest do
 
       on_exit(fn ->
         # Clean up handlers - match on string IDs that start with our test prefix
-        :telemetry.list_handlers([])
+        handlers = :telemetry.list_handlers([])
+
+        handlers
         |> Enum.filter(fn handler ->
           case handler.id do
             id when is_binary(id) -> String.starts_with?(id, "test-enhanced-ecto")
@@ -204,7 +205,9 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedEctoTest do
 
       on_exit(fn ->
         # Clean up handlers - match on string IDs that start with our test prefix
-        :telemetry.list_handlers([])
+        handlers = :telemetry.list_handlers([])
+
+        handlers
         |> Enum.filter(fn handler ->
           case handler.id do
             id when is_binary(id) -> String.starts_with?(id, "test-transaction")

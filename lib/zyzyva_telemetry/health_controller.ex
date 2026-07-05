@@ -9,8 +9,10 @@ defmodule ZyzyvaTelemetry.HealthController do
   Or if you need customization, copy this module and modify as needed.
   """
 
+  @spec init(term()) :: term()
   def init(opts), do: opts
 
+  @spec call(Plug.Conn.t(), term()) :: Plug.Conn.t()
   def call(conn, _opts) do
     {status_code, body} = get_health_response()
 
@@ -20,6 +22,7 @@ defmodule ZyzyvaTelemetry.HealthController do
   end
 
   # Phoenix controller action
+  @spec index(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def index(conn, _params) do
     call(conn, [])
   end
@@ -118,7 +121,7 @@ defmodule ZyzyvaTelemetry.HealthController do
     _ -> nil
   end
 
-  defp format_timestamp(nil), do: DateTime.utc_now() |> DateTime.to_iso8601()
+  defp format_timestamp(nil), do: DateTime.to_iso8601(DateTime.utc_now())
   defp format_timestamp(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp format_timestamp(ts), do: to_string(ts)
 

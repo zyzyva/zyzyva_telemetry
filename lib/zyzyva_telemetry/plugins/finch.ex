@@ -49,7 +49,8 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
   ## Configuration
 
   defp get_config do
-    Application.get_env(:zyzyva_telemetry, :finch, [])
+    :zyzyva_telemetry
+    |> Application.get_env(:finch, [])
     |> Keyword.put_new(:enabled, false)
     |> Keyword.put_new(:track_connection_time, true)
     |> Keyword.put_new(:track_queue_time, true)
@@ -61,13 +62,15 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
   defp build_metrics(%{enabled: false}), do: []
 
   defp build_metrics(config) do
-    [
-      request_event(),
-      connection_event(config),
-      queue_event(config),
-      error_event()
-    ]
-    |> Enum.reject(&is_nil/1)
+    Enum.reject(
+      [
+        request_event(),
+        connection_event(config),
+        queue_event(config),
+        error_event()
+      ],
+      &is_nil/1
+    )
   end
 
   defp request_event do
@@ -82,7 +85,7 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
           tags: [:scheme, :host, :port, :method],
           unit: {:native, :millisecond},
           reporter_options: [
-            buckets: [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+            buckets: [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10_000]
           ]
         ),
         counter(
@@ -178,6 +181,7 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
   Handles Finch request completion events.
   Extracts host, status code, and other metadata for metrics.
   """
+  @spec handle_request_stop(list(), map(), map(), term()) :: :ok
   def handle_request_stop(_event_name, measurements, metadata, _config) do
     # Extract request details from metadata
     request = metadata[:request]
@@ -196,6 +200,7 @@ defmodule ZyzyvaTelemetry.Plugins.Finch do
   Handles Finch request exceptions.
   Tracks timeout, connection errors, and other failures.
   """
+  @spec handle_request_exception(list(), map(), map(), term()) :: :ok
   def handle_request_exception(_event_name, measurements, metadata, _config) do
     request = metadata[:request]
     error_kind = classify_error(metadata[:kind], metadata[:reason])

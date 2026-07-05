@@ -41,6 +41,7 @@ defmodule ZyzyvaTelemetry.LokiLogger do
   # Public API
   # ============================================================================
 
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -50,12 +51,18 @@ defmodule ZyzyvaTelemetry.LokiLogger do
   # Called by the logger framework in the caller's process.
   # ============================================================================
 
+  @spec log(map(), map()) :: :ok
   def log(log_event, %{config: %{server: server}}) do
     GenServer.cast(server, {:log, log_event})
   end
 
+  @spec adding_handler(map()) :: {:ok, map()}
   def adding_handler(config), do: {:ok, config}
+
+  @spec removing_handler(map()) :: :ok
   def removing_handler(_config), do: :ok
+
+  @spec changing_config(atom(), map(), map()) :: {:ok, map()}
   def changing_config(_set_or_update, _old, new), do: {:ok, new}
 
   # ============================================================================
@@ -70,7 +77,22 @@ defmodule ZyzyvaTelemetry.LokiLogger do
     flush_interval = opts[:flush_interval] || @default_flush_interval
     max_buffer_size = opts[:max_buffer_size] || @default_max_buffer_size
 
-    # Register as an Erlang :logger handler
+    register_logger_handler(min_level)
+    schedule_flush(flush_interval)
+
+    {:ok,
+     %{
+       loki_url: loki_url,
+       service_name: service_name,
+       buffer: [],
+       buffer_size: 0,
+       max_buffer_size: max_buffer_size,
+       flush_interval: flush_interval
+     }}
+  end
+
+  # Register as an Erlang :logger handler, replacing any existing one.
+  defp register_logger_handler(min_level) do
     handler_config = %{
       level: min_level,
       config: %{server: __MODULE__},
@@ -86,18 +108,6 @@ defmodule ZyzyvaTelemetry.LokiLogger do
         :logger.remove_handler(@handler_id)
         :logger.add_handler(@handler_id, __MODULE__, handler_config)
     end
-
-    schedule_flush(flush_interval)
-
-    {:ok,
-     %{
-       loki_url: loki_url,
-       service_name: service_name,
-       buffer: [],
-       buffer_size: 0,
-       max_buffer_size: max_buffer_size,
-       flush_interval: flush_interval
-     }}
   end
 
   @impl GenServer
@@ -149,37 +159,38 @@ defmodule ZyzyvaTelemetry.LokiLogger do
   # ============================================================================
 
   defp format_entry(log_event, service_name) do
-    level = Map.get(log_event, :level, :info) |> to_string()
     meta = Map.get(log_event, :meta, %{})
     timestamp_ns = system_time_ns(meta)
+    level = to_string(Map.get(log_event, :level, :info))
 
-    message = format_message(log_event)
+    log_line = build_log_line(log_event, meta, service_name, level)
 
+    %{level: level, timestamp_ns: timestamp_ns, log_line: log_line}
+  end
+
+  defp build_log_line(log_event, meta, service_name, level) do
     base = %{
-      timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+      timestamp: DateTime.to_iso8601(DateTime.utc_now()),
       service: service_name,
       level: level,
-      message: message,
-      module: meta[:mfa] |> format_mfa(),
-      file: meta[:file] |> to_string_safe(),
+      message: format_message(log_event),
+      module: format_mfa(meta[:mfa]),
+      file: to_string_safe(meta[:file]),
       line: meta[:line],
-      pid: meta[:pid] |> inspect_safe(),
+      pid: inspect_safe(meta[:pid]),
       request_id: meta[:request_id],
       correlation_id: get_correlation_id(),
-      node: Node.self() |> to_string()
+      node: to_string(Node.self())
     }
 
     # Callers can attach structured attribution/event data via Logger metadata
     # under :event_fields — merge it into the log line so LogQL can filter on
     # `page_type`, `source`, `utm_campaign`, etc. Caller fields win over the
     # base fields above so callers can override e.g. `correlation_id`.
-    log_line =
-      base
-      |> Map.merge(normalize_event_fields(meta[:event_fields]))
-      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-      |> Map.new()
-
-    %{level: level, timestamp_ns: timestamp_ns, log_line: log_line}
+    base
+    |> Map.merge(normalize_event_fields(meta[:event_fields]))
+    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    |> Map.new()
   end
 
   defp format_message(%{msg: {:string, chardata}}), do: IO.chardata_to_string(chardata)
@@ -193,7 +204,7 @@ defmodule ZyzyvaTelemetry.LokiLogger do
   end
 
   defp format_message(%{msg: {format, args}}) when is_list(format) or is_binary(format) do
-    :io_lib.format(format, args) |> IO.chardata_to_string()
+    IO.chardata_to_string(:io_lib.format(format, args))
   rescue
     _ -> "#{inspect(format)} #{inspect(args)}"
   end
@@ -226,7 +237,7 @@ defmodule ZyzyvaTelemetry.LokiLogger do
   defp inspect_safe(val), do: inspect(val)
 
   defp system_time_ns(%{time: time}), do: to_string(time * 1000)
-  defp system_time_ns(_), do: System.os_time(:nanosecond) |> to_string()
+  defp system_time_ns(_), do: to_string(System.os_time(:nanosecond))
 
   defp get_correlation_id do
     ZyzyvaTelemetry.Correlation.current()
@@ -241,24 +252,7 @@ defmodule ZyzyvaTelemetry.LokiLogger do
   defp push_to_loki(nil, _service_name, _entries), do: :ok
 
   defp push_to_loki(loki_url, service_name, entries) do
-    # Group entries by level into separate Loki streams
-    streams =
-      entries
-      |> Enum.group_by(& &1.level)
-      |> Enum.map(fn {level, level_entries} ->
-        values = Enum.map(level_entries, fn e -> [e.timestamp_ns, JSON.encode!(e.log_line)] end)
-
-        %{
-          stream: %{
-            job: "logs",
-            service: service_name,
-            level: level
-          },
-          values: values
-        }
-      end)
-
-    payload = %{streams: streams}
+    payload = %{streams: build_streams(entries, service_name)}
     url = "#{loki_url}/loki/api/v1/push"
 
     case Req.post(url, json: payload) do
@@ -277,5 +271,23 @@ defmodule ZyzyvaTelemetry.LokiLogger do
     error ->
       Logger.warning("LokiLogger: exception during push: #{inspect(error)}")
       :error
+  end
+
+  # Group entries by level into separate Loki streams.
+  defp build_streams(entries, service_name) do
+    entries
+    |> Enum.group_by(& &1.level)
+    |> Enum.map(fn {level, level_entries} ->
+      values = Enum.map(level_entries, fn e -> [e.timestamp_ns, JSON.encode!(e.log_line)] end)
+
+      %{
+        stream: %{
+          job: "logs",
+          service: service_name,
+          level: level
+        },
+        values: values
+      }
+    end)
   end
 end

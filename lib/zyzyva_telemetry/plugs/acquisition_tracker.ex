@@ -56,6 +56,7 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTracker do
 
   @default_session_key "acquisition"
 
+  @spec init(keyword()) :: map()
   def init(opts) do
     %{
       session_key: Keyword.get(opts, :session_key, @default_session_key),
@@ -63,22 +64,21 @@ defmodule ZyzyvaTelemetry.Plugs.AcquisitionTracker do
     }
   end
 
+  @spec call(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def call(conn, %{session_key: session_key, refresh_on_utm: refresh_on_utm}) do
     conn = fetch_query_params(conn)
     existing = get_session(conn, session_key)
     has_new_utms? = utm_present?(conn.query_params)
 
     acquisition =
-      cond do
-        existing && !(refresh_on_utm and has_new_utms?) ->
-          # Preserve first-touch source/utm/referer/landing_path, but patch
-          # in request-time enrichment (geo, device, ip, user_agent) so
-          # sessions established before enrichment existed — or with an older
-          # IP/device — get updated values without losing first-touch credit.
-          refresh_enrichment(existing, conn)
-
-        true ->
-          build_from_conn(conn)
+      if existing && !(refresh_on_utm and has_new_utms?) do
+        # Preserve first-touch source/utm/referer/landing_path, but patch
+        # in request-time enrichment (geo, device, ip, user_agent) so
+        # sessions established before enrichment existed — or with an older
+        # IP/device — get updated values without losing first-touch credit.
+        refresh_enrichment(existing, conn)
+      else
+        build_from_conn(conn)
       end
 
     Acquisition.set(acquisition)

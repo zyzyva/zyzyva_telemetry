@@ -6,8 +6,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveViewTest do
 
   # Helper function to extract metrics from Event structs
   defp extract_metrics(events) do
-    events
-    |> Enum.flat_map(fn
+    Enum.flat_map(events, fn
       %{metrics: metrics} -> metrics
       metric -> [metric]
     end)

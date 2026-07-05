@@ -44,21 +44,21 @@ defmodule ZyzyvaTelemetry.Reporters.Loki do
   end
 
   defp build_log_entry(event, service_name) do
-    timestamp_ns = System.os_time(:nanosecond) |> to_string()
+    timestamp_ns = to_string(System.os_time(:nanosecond))
 
     # Build log line as JSON string (Loki expects the log line as a string)
-    log_line = %{
-      timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-      service: service_name,
-      level: event_level(event),
-      kind: event_kind(event),
-      message: event_message(event),
-      stacktrace: event_stacktrace(event),
-      correlation_id: get_correlation_id(),
-      metadata: event |> Map.get(:metadata, %{}) |> sanitize_for_json(),
-      node: Node.self() |> to_string()
-    }
-    |> JSON.encode!()
+    log_line =
+      JSON.encode!(%{
+        timestamp: DateTime.to_iso8601(DateTime.utc_now()),
+        service: service_name,
+        level: event_level(event),
+        kind: event_kind(event),
+        message: event_message(event),
+        stacktrace: event_stacktrace(event),
+        correlation_id: get_correlation_id(),
+        metadata: event |> Map.get(:metadata, %{}) |> sanitize_for_json(),
+        node: to_string(Node.self())
+      })
 
     # Loki stream format with labels
     %{
@@ -108,6 +108,7 @@ defmodule ZyzyvaTelemetry.Reporters.Loki do
   defp event_message(%{reason: reason}) when is_exception(reason) do
     Exception.message(reason)
   end
+
   defp event_message(%{reason: reason}) when is_binary(reason), do: reason
   defp event_message(%{message: message}), do: message
   defp event_message(_), do: "Unknown error"
@@ -115,6 +116,7 @@ defmodule ZyzyvaTelemetry.Reporters.Loki do
   defp event_stacktrace(%{stacktrace: stacktrace}) when is_list(stacktrace) do
     Exception.format_stacktrace(stacktrace)
   end
+
   defp event_stacktrace(_), do: nil
 
   defp get_correlation_id do

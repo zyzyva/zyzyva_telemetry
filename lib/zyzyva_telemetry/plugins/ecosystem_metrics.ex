@@ -25,7 +25,7 @@ defmodule ZyzyvaTelemetry.Plugins.EcosystemMetrics do
             tags: [:service_name, :operation],
             unit: {:native, :millisecond},
             reporter_options: [
-              buckets: [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+              buckets: [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10_000]
             ]
           ),
           counter(

@@ -50,7 +50,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenix do
   ## Configuration
 
   defp get_config do
-    Application.get_env(:zyzyva_telemetry, :enhanced_phoenix, [])
+    :zyzyva_telemetry
+    |> Application.get_env(:enhanced_phoenix, [])
     |> Keyword.put_new(:enabled, false)
     |> Keyword.put_new(:track_payload_sizes, true)
     |> Enum.into(%{})
@@ -61,11 +62,13 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedPhoenix do
   defp build_metrics(%{enabled: false}), do: []
 
   defp build_metrics(config) do
-    [
-      payload_size_event(config),
-      request_type_event()
-    ]
-    |> Enum.reject(&is_nil/1)
+    Enum.reject(
+      [
+        payload_size_event(config),
+        request_type_event()
+      ],
+      &is_nil/1
+    )
   end
 
   defp payload_size_event(%{track_payload_sizes: true}) do

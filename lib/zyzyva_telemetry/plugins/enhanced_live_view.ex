@@ -56,7 +56,8 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
   ## Configuration
 
   defp get_config do
-    Application.get_env(:zyzyva_telemetry, :enhanced_live_view, [])
+    :zyzyva_telemetry
+    |> Application.get_env(:enhanced_live_view, [])
     |> Keyword.put_new(:enabled, false)
     |> Keyword.put_new(:track_websocket, true)
     |> Keyword.put_new(:track_process_health, true)
@@ -71,13 +72,15 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
   defp build_metrics(%{enabled: false}), do: []
 
   defp build_metrics(config) do
-    [
-      websocket_event(config),
-      render_event(),
-      mount_event(),
-      handle_event_event()
-    ]
-    |> Enum.reject(&is_nil/1)
+    Enum.reject(
+      [
+        websocket_event(config),
+        render_event(),
+        mount_event(),
+        handle_event_event()
+      ],
+      &is_nil/1
+    )
   end
 
   defp websocket_event(%{track_websocket: true}) do
@@ -183,11 +186,13 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
   defp build_polling_metrics(%{enabled: false}, _opts), do: []
 
   defp build_polling_metrics(%{track_process_health: true} = config, _opts) do
-    [
-      poll_process_health_metric(config),
-      poll_zombie_metric(config)
-    ]
-    |> Enum.reject(&is_nil/1)
+    Enum.reject(
+      [
+        poll_process_health_metric(config),
+        poll_zombie_metric(config)
+      ],
+      &is_nil/1
+    )
   end
 
   defp build_polling_metrics(_config, _opts), do: []
@@ -216,6 +221,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
   Measures the number of active LiveView processes.
   This is called periodically by PromEx polling.
   """
+  @spec measure_live_view_processes(term()) :: non_neg_integer()
   def measure_live_view_processes(_event) do
     count_live_view_processes()
   end
@@ -223,24 +229,23 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
   ## Process Health Monitoring
 
   defp count_live_view_processes do
-    Process.list()
-    |> Enum.count(&is_live_view_process?/1)
+    Enum.count(Process.list(), &live_view_process?/1)
   end
 
-  defp is_live_view_process?(pid) do
+  defp live_view_process?(pid) do
     case Process.info(pid, :dictionary) do
       {:dictionary, dict} ->
         # LiveView processes have specific keys in their process dictionary
         Keyword.has_key?(dict, :"$callers") ||
           (Keyword.has_key?(dict, :"$initial_call") &&
-             is_phoenix_live_view_process?(dict))
+             phoenix_live_view_process?(dict))
 
       _ ->
         false
     end
   end
 
-  defp is_phoenix_live_view_process?(dict) do
+  defp phoenix_live_view_process?(dict) do
     case Keyword.get(dict, :"$initial_call") do
       {Phoenix.LiveView.Channel, _, _} -> true
       {Phoenix.LiveView.Socket, _, _} -> true
@@ -256,11 +261,11 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
     now = System.monotonic_time()
 
     Process.list()
-    |> Enum.filter(&is_live_view_process?/1)
-    |> Enum.count(fn pid -> is_zombie_process?(pid, now, threshold_native) end)
+    |> Enum.filter(&live_view_process?/1)
+    |> Enum.count(fn pid -> zombie_process?(pid, now, threshold_native) end)
   end
 
-  defp is_zombie_process?(pid, now, threshold) do
+  defp zombie_process?(pid, now, threshold) do
     case Process.info(pid, [:message_queue_len, :reductions]) do
       [{:message_queue_len, 0}, {:reductions, _reductions}] ->
         # Process with empty queue might be idle
@@ -283,6 +288,7 @@ defmodule ZyzyvaTelemetry.Plugins.EnhancedLiveView do
   @doc """
   Handles LiveView render completion to measure diff size.
   """
+  @spec handle_render_stop(term(), map(), map(), term()) :: :ok
   def handle_render_stop(_event_name, measurements, metadata, _config) do
     diff_size = estimate_diff_size(metadata[:socket])
 

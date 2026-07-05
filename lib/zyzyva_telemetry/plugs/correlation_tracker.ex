@@ -21,8 +21,10 @@ defmodule ZyzyvaTelemetry.Plugs.CorrelationTracker do
 
   @correlation_header "x-correlation-id"
 
+  @spec init(term()) :: term()
   def init(opts), do: opts
 
+  @spec call(Plug.Conn.t(), term()) :: Plug.Conn.t()
   def call(conn, _opts) do
     correlation_id = extract_or_generate_correlation_id(conn)
 

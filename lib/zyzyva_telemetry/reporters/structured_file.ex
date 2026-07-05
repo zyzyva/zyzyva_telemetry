@@ -11,7 +11,7 @@ defmodule ZyzyvaTelemetry.Reporters.StructuredFile do
     opts = Process.get(:tower_reporter_opts, [])
 
     log_entry = %{
-      timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+      timestamp: DateTime.to_iso8601(DateTime.utc_now()),
       service: opts[:service_name],
       level: event_level(event),
       kind: event_kind(event),
@@ -19,7 +19,7 @@ defmodule ZyzyvaTelemetry.Reporters.StructuredFile do
       stacktrace: event_stacktrace(event),
       correlation_id: get_correlation_id(),
       metadata: Map.get(event, :metadata, %{}),
-      node: Node.self() |> to_string()
+      node: to_string(Node.self())
     }
 
     log_path = opts[:log_path]

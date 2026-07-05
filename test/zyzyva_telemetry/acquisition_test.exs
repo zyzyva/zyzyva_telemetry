@@ -41,6 +41,7 @@ defmodule ZyzyvaTelemetry.AcquisitionTest do
       assert Acquisition.classify_referer("https://t.co/abc") == :social_x
 
       assert Acquisition.classify_referer("https://www.facebook.com/") == :social_facebook
+
       assert Acquisition.classify_referer("https://l.facebook.com/l.php?u=...") ==
                :social_facebook
 
@@ -129,7 +130,14 @@ defmodule ZyzyvaTelemetry.AcquisitionTest do
     end
 
     test "strips query strings from stored referer" do
-      result = Acquisition.build("https://www.bing.com/search?q=secret+term", %{}, "/", DateTime.utc_now())
+      result =
+        Acquisition.build(
+          "https://www.bing.com/search?q=secret+term",
+          %{},
+          "/",
+          DateTime.utc_now()
+        )
+
       assert result.referer == "https://www.bing.com/search"
     end
 
@@ -161,7 +169,10 @@ defmodule ZyzyvaTelemetry.AcquisitionTest do
     end
 
     test "propagate/1 merges :source when acquisition is set" do
-      Acquisition.set(Acquisition.build("https://www.linkedin.com/", %{}, "/", DateTime.utc_now()))
+      Acquisition.set(
+        Acquisition.build("https://www.linkedin.com/", %{}, "/", DateTime.utc_now())
+      )
+
       assert Acquisition.propagate(%{foo: :bar}) == %{foo: :bar, source: :social_linkedin}
     end
 
@@ -170,7 +181,10 @@ defmodule ZyzyvaTelemetry.AcquisitionTest do
     end
 
     test "propagate/1 does not overwrite an existing :source in metadata" do
-      Acquisition.set(Acquisition.build("https://www.linkedin.com/", %{}, "/", DateTime.utc_now()))
+      Acquisition.set(
+        Acquisition.build("https://www.linkedin.com/", %{}, "/", DateTime.utc_now())
+      )
+
       assert Acquisition.propagate(%{source: :manual_override}) == %{source: :manual_override}
     end
   end

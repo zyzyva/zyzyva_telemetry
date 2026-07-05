@@ -39,10 +39,12 @@ if Code.ensure_loaded?(Plug) do
 
     import Plug.Conn
 
+    @spec init(term()) :: term()
     def init(opts) do
       opts
     end
 
+    @spec call(Plug.Conn.t(), term()) :: Plug.Conn.t()
     def call(conn, opts) do
       path = opts[:path] || "/health"
 
@@ -64,6 +66,7 @@ if Code.ensure_loaded?(Plug) do
     end
 
     # Alternative entry point for match routes
+    @spec handle(Plug.Conn.t(), map()) :: Plug.Conn.t()
     def handle(conn, _params) do
       send_health_response(conn, [])
     end
@@ -144,7 +147,7 @@ if Code.ensure_loaded?(Plug) do
       |> Map.merge(extract_custom_checks(data))
     end
 
-    defp format_timestamp(nil), do: DateTime.utc_now() |> DateTime.to_iso8601()
+    defp format_timestamp(nil), do: DateTime.to_iso8601(DateTime.utc_now())
     defp format_timestamp(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
     defp format_timestamp(ts), do: to_string(ts)
 

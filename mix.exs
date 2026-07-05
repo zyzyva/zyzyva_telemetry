@@ -7,11 +7,22 @@ defmodule ZyzyvaTelemetry.MixProject do
       version: "1.0.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
+      aliases: aliases(),
       deps: deps(),
+      dialyzer: [
+        plt_local_path: "priv/plts",
+        plt_core_path: "priv/plts",
+        plt_add_apps: [:mix, :ex_unit],
+        ignore_warnings: ".dialyzer_ignore.exs"
+      ],
       description:
         "Shared observability library wrapping Prometheus, Tower, and Loki for the Botify ecosystem",
       package: package()
     ]
+  end
+
+  def cli do
+    [preferred_envs: [check: :test, "check.all": :test]]
   end
 
   # Run "mix help compile.app" to learn about applications.
@@ -45,9 +56,29 @@ defmodule ZyzyvaTelemetry.MixProject do
       {:ecto_sql, "~> 3.10", optional: true},
 
       # Broadway integration (NEW - optional)
-      {:broadway, "~> 1.0", optional: true}
+      {:broadway, "~> 1.0", optional: true},
 
       # REMOVED: {:exqlite, "~> 0.33"} # No longer needed
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  defp aliases do
+    [
+      check: [
+        "format --check-formatted",
+        "credo --strict",
+        "compile --warnings-as-errors",
+        "test"
+      ],
+      "check.all": [
+        "format --check-formatted",
+        "credo --strict",
+        "compile --warnings-as-errors",
+        "test",
+        "dialyzer"
+      ]
     ]
   end
 

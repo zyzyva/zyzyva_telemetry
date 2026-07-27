@@ -3,15 +3,15 @@ defmodule CredoChecks.MaxScopeBindings do
   Flags function bodies that introduce more than `:max_bindings` distinct
   local bindings (parameters plus variables bound in the body).
 
-  This enforces the working-memory rule from the swarm style guide:
-  a scope with too many live variables is hard to reason about, for a
-  human and for an LLM alike. When you hit the limit, the fix is to
-  extract a small named helper, not to add a seventh variable.
+  This enforces a working-memory rule: a scope with too many live
+  variables is hard to reason about, for a human and for an LLM alike.
+  When you hit the limit, the fix is to extract a small named helper, not
+  to add a seventh variable.
 
-  The module is deliberately NOT namespaced under an app: this file is a
-  fleet-wide practice (distributed via the boss repo), loaded by credo's
-  `requires` from `credo_checks/` and never compiled into any app, so the
-  same file drops into every repo verbatim.
+  The module is deliberately NOT namespaced under an app: it is loaded by
+  credo's `requires` from `credo_checks/` at the project root and never
+  compiled into the application, so the same file can be dropped into any
+  project unchanged.
 
   ## Configuration
 
@@ -20,10 +20,14 @@ defmodule CredoChecks.MaxScopeBindings do
   ## What counts
 
   Parameters and variables introduced via `=` (and `<-` inside `with`)
-  are counted. `_`-prefixed variables are ignored. The count is a *sum
-  over the function clause*, not a point-in-time live set, so it is a
-  deliberately conservative proxy: it over-counts rebinding but is cheap
-  and stable. Treat a flag as "look at this function", not a hard error.
+  are counted. `_`-prefixed variables are ignored, as are things that
+  parse as variables but bind nothing: binary-segment types and modifiers
+  (`<<n::little-32, rest::binary>>` binds `n` and `rest`, not `little` or
+  `binary`) and default-argument values (`arg \\\\ @default` binds `arg`,
+  not `default`). The count is a *sum over the function clause*, not a
+  point-in-time live set, so it is a deliberately conservative proxy: it
+  over-counts rebinding but is cheap and stable. Treat a flag as "look at
+  this function", not a hard error.
 
   This is intentionally approximate. It is a nudge, not a type checker.
   """
@@ -112,6 +116,21 @@ defmodule CredoChecks.MaxScopeBindings do
       Macro.prewalk(pattern, [], fn
         {:^, _meta, _}, acc ->
           {nil, acc}
+
+        # Binary segment: `value::type-modifiers`. Only the left side binds.
+        # The right side names types and modifiers (`binary`, `little`,
+        # `signed`, `size(n)`, ...) which parse as var nodes but bind
+        # nothing — counting them made every binary-parsing function look
+        # 1-2 bindings heavier than it is, with no refactor able to remove
+        # them.
+        {:"::", _meta, [lhs, _type]}, acc ->
+          {nil, vars_in_pattern(lhs) ++ acc}
+
+        # Default argument: `arg \\ @default`. Only `arg` binds; the
+        # default value is an expression (often a module attribute, which
+        # also parses as a var node).
+        {:\\, _meta, [lhs, _default]}, acc ->
+          {nil, vars_in_pattern(lhs) ++ acc}
 
         {name, _meta, context} = node, acc when is_atom(name) and is_atom(context) ->
           {node, [name | acc]}
